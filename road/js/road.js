@@ -7,6 +7,7 @@ export class road {
     this.group = group;
     this.camera = camera;
 
+    // 配置参数
     this.height = height;
     this.width = width;
     this.depth = depth;
@@ -14,7 +15,10 @@ export class road {
     this.radiusTop = radiusTop;
     this.radiusBottom = radiusBottom;
 
+    // 全局参数
     this.pointsForHelpState = false;
+    // 控制旋转
+    this.vec1 = null;
 
     this.init();
   }
@@ -185,34 +189,23 @@ export class road {
   }
 
   getCornerPosition(coord, offset = 14) {
-    console.log(offset)
-    // 两个点的坐标
-    const startPoint = coord[coord.length - 2]; // 起点坐标
-    const endPoint = coord[coord.length - 1]; // 终点坐标
-    // 计算从 pointA 到 pointB 的方向向量
+    const [startPoint, endPoint] = coord.slice(-2); // 获取起点和终点坐标
     const { direction } = this.getInfoBytwoPoint(startPoint, endPoint);
 
+    // 计算左偏移点和右偏移点
+    const leftOffset = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(offset);
+    const rightOffset = new THREE.Vector3(direction.z, 0, -direction.x).multiplyScalar(offset);
 
-    // 创建一个新的方向向量，不影响原始方向向量
-    const modifiedDirection = direction.clone().multiplyScalar(1);
-    // 创建一个新的方向向量，不影响原始方向向量
-    const modifiedDirection2 = direction.clone().multiplyScalar(-1);
-    // 计算左偏移向量（垂直于direction）
-    const leftOffsetVector = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar(offset);
-    // 计算左偏移点
-    const leftTopPoint = new THREE.Vector3().copy(startPoint).add(leftOffsetVector).add(modifiedDirection);
-    const leftBottomPoint = new THREE.Vector3().copy(endPoint).add(leftOffsetVector).add(modifiedDirection2);
+    // 计算四个角的点
+    const leftTopPoint = new THREE.Vector3().copy(startPoint).add(leftOffset).add(direction);
+    const leftBottomPoint = new THREE.Vector3().copy(endPoint).add(leftOffset).sub(direction);
+    const rightTopPoint = new THREE.Vector3().copy(startPoint).add(rightOffset).add(direction);
+    const rightBottomPoint = new THREE.Vector3().copy(endPoint).add(rightOffset).sub(direction);
 
-    // 计算右偏移向量（垂直于direction）
-    const rightOffsetVector = new THREE.Vector3(direction.z, 0, -direction.x).multiplyScalar(offset);
-
-
-    // 计算右偏移点
-    const rightTopPoint = new THREE.Vector3().copy(startPoint).add(rightOffsetVector).add(modifiedDirection);
-    const rightBottomPoint = new THREE.Vector3().copy(endPoint).add(rightOffsetVector).add(modifiedDirection2);
-
-    return { leftTopPoint, leftBottomPoint, rightTopPoint, rightBottomPoint }
+    return { leftTopPoint, leftBottomPoint, rightTopPoint, rightBottomPoint };
   }
+
+
 
   createCylinder(position, radiusTop, radiusBottom) {
     // 创建柱形几何体
@@ -230,8 +223,14 @@ export class road {
     return cylinder;
   }
 
-  createbend(startPoint, endPoint, r = 20, color = 0x3e3e3e) {
-    const { direction, yAxisAngle, verticalVector } = this.getInfoBytwoPoint(startPoint, endPoint)
+  createbend(startPoint, endPoint, r = 20, color = 0x3e3e3e, isClockwise = true) {
+    let { direction, yAxisAngle, verticalVector } = this.getInfoBytwoPoint(startPoint, endPoint);
+    if (this.vec1) {
+      direction = this.vec1
+      yAxisAngle = this.getInitY(this.vec1)
+      verticalVector = this.getVerticalVector(this.vec1)
+    }
+
     const heartShape = new THREE.Shape()
     heartShape.absarc(0, 0, r * 2, 0, Math.PI / 2);
     //内层弧形
@@ -241,12 +240,44 @@ export class road {
     const geometry = new THREE.ExtrudeGeometry(heartShape, extrudeSettings);
     const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const subRes = new THREE.Mesh(geometry, material);
-    subRes.name = "弯道"
-    subRes.rotation.x = -Math.PI / 2
-    // 本来应该转y, 旋转后转z
-    subRes.rotation.z = -yAxisAngle;
+    subRes.name = "弯道";
+
+    let arcPosition;
+    // 获取弯道的初始坐标
     const initPosition = new THREE.Vector3(endPoint.x, endPoint.y, endPoint.z)
-    const arcPosition = this.getPointByVector(initPosition, verticalVector, 3 / 2 * r)
+    if (isClockwise) {
+      arcPosition = this.getPointByVector(initPosition, verticalVector, 3 / 2 * r)
+      subRes.rotation.x = -Math.PI / 2
+      // 本来应该转y,旋转后转z
+      subRes.rotation.z = -yAxisAngle
+      // 0.5 是挤压厚度的一半
+
+      const angle = Math.PI / 2
+      // 初始边向量  旋转度数 默认  Math.PI /2
+
+      const quaternion = new THREE.Quaternion().setFromAxisAngle(verticalVector, angle);
+      // const v = new THREE.Vector3(1,0,0); // 原始向量
+      const rotatedVec = verticalVector.clone().applyQuaternion(quaternion); // 绕轴旋转后的向量
+      // 给下一次的初始旋转向量赋值
+      this.vec1 = rotatedVec;
+
+    } else {
+      subRes.rotation.x = Math.PI / 2
+      // 本来应该转y,旋转后转z
+      subRes.rotation.z = yAxisAngle
+      const reverseVector = verticalVector.clone().negate();
+      arcPosition = this.getPointByVector(initPosition, reverseVector, 3 / 2 * r)
+      // 0.5 是挤压厚度的一半
+
+      const reverseVerticalVector = verticalVector.clone().negate();
+      const angle = Math.PI / 2
+      const quaternion = new THREE.Quaternion().setFromAxisAngle(reverseVerticalVector, angle);
+      // const v = new THREE.Vector3(1,0,0); // 原始向量
+      const rotatedVec = reverseVerticalVector.clone().applyQuaternion(quaternion); // 绕轴旋转后的向量
+      // 旋转
+      this.vec1 = rotatedVec
+    }
+    subRes.material.color = new THREE.Color(color);
     subRes.position.set(arcPosition.x, arcPosition.y - 1.5, arcPosition.z)
     const nextStartPoint = this.getPointByVector(arcPosition, direction, 3 / 2 * r);
     subRes.material.color = new THREE.Color(color);
@@ -291,6 +322,21 @@ export class road {
       yAxisAngle: angle,
       verticalVector,
     }
+  }
+
+  // 获取模型的初始旋转值
+  getInitY(direction) {
+    const yAxisAngle = Math.atan2(direction.z, direction.x);
+    return yAxisAngle;
+  }
+
+  // 获取垂直向量
+  getVerticalVector(direction) {
+    // 垂直向量
+    const verticalVector = new THREE.Vector3().crossVectors(direction, new THREE.Vector3(0, 1, 0));
+    direction.normalize();
+
+    return verticalVector
   }
 
   drawLineHelper(startPoint, intersects, radius, color = 0xffff00) {
