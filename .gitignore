@@ -1,6 +1,7 @@
 .DS_Store
 node_modules
-/node_modules/
+/road/node_modules/
+/road备份/node_modules/
 /dist
 dist.zip
 packages/*/dist
