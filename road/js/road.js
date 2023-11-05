@@ -480,9 +480,24 @@ export class road {
       const initPosition = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z);
       const verticalVector = this.getVerticalVector(this.vec1);
 
-      const mainVector = new THREE.Vector3(this.vec1.x, this.vec1.y, this.vec1.z);
-      const pointVector = new THREE.Vector3(intersects.x, intersects.y, intersects.z);
-      const crossProduct = new THREE.Vector3().crossVectors(mainVector, pointVector);
+    
+
+
+
+
+      // 创建一个向量表示给定向量的方向
+      const vectorDirection = new THREE.Vector3(this.vec1.x, this.vec1.y, this.vec1.z);// 替换成给定向量的方向
+
+      // 创建一个向量表示起点到目标点的向量
+      const startPoint2 = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z); // 替换成起点坐标
+      const targetPoint = new THREE.Vector3(intersects.x, intersects.y, intersects.z); // 替换成目标点坐标
+      const pointVector = new THREE.Vector3().subVectors(targetPoint, startPoint2);
+
+      // 执行向量叉乘运算
+      const crossProduct = new THREE.Vector3();
+      crossProduct.crossVectors(vectorDirection, pointVector);
+
+
       // 判断坐标点是否在向量的左侧或右侧
       if (crossProduct.y > 0) {
         console.log("坐标点在向量的左侧");

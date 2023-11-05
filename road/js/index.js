@@ -141,6 +141,18 @@ folder2.add(params, 'createObject').name('Create'); // Add the Create button
 window.scene = scene;
 
 
+// 创建立方体的几何体
+const geometry2 = new THREE.BoxGeometry(1, 1, 1); // 指定立方体的宽度、高度和深度
+
+// 创建一个基础材质
+const material2 = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // 设置立方体的颜色
+
+// 使用几何体和材质创建网格对象
+const cube = new THREE.Mesh(geometry2, material2);
+
+// 将网格对象添加到场景
+scene.add(cube);
+
 
 
 
