@@ -10,7 +10,8 @@ export class road {
     width,
     depth,
     radiusTop,
-    radiusBottom
+    radiusBottom,
+    radiusColor = 0x4d4d4f
   ) {
     this.container = container;
     this.scene = scene;
@@ -24,11 +25,18 @@ export class road {
 
     this.radiusTop = radiusTop;
     this.radiusBottom = radiusBottom;
+    this.radiusColor = radiusColor;
 
     // 全局参数
     this.pointsForHelpState = false;
+    this.isOrientedLine = false;
     // 控制旋转
     this.vec1 = null;
+    // 方向 用于判断鼠标是否在向量的左侧还是右侧，还是中间
+    this.mouseDirection = '';
+
+    // 鼠标事件
+    this.mouseMoveObj = null;
 
     this.init();
   }
@@ -41,6 +49,11 @@ export class road {
     this.container.addEventListener(
       "mousedown",
       (e) => this.onMouseDown(e),
+      false
+    );
+    this.container.addEventListener(
+      "mousemove",
+      (e) => this.mouseMove(e),
       false
     );
   }
@@ -83,13 +96,11 @@ export class road {
       if (!this.ctrlDown) {
         this.pointsForHelpLines.push(startPoint);
       }
-
-      this.container.addEventListener(
-        "mousemove",
-        (e) => this.mouseMove(e),
-        false
-      );
-
+      if (this.isOrientedLine && !this.ctrlDown) {
+        const len = this.pointsForHelpLines.length;
+        const lastPoint = this.calcOritLinePoint(this.vec1.clone(), this.pointsForHelpLines[len - 2], startPoint)
+        this.pointsForHelpLines.splice(len - 1, 1, lastPoint)
+      }
       // 如果有两个点，则生成线段和墙体
       if (this.pointsForHelpLines.length >= 2) {
         // 创建线段
@@ -109,7 +120,7 @@ export class road {
           rightTopPoint,
           rightBottomPoint,
         ]) {
-          const cylinder = this.createCylinder(point, radiusTop, radiusBottom);
+          const cylinder = this.createCylinder(point, radiusTop, radiusBottom, this.radiusColor);
           this.group.add(cylinder);
         }
 
@@ -122,10 +133,12 @@ export class road {
             startPoint,
             endPoint,
             this.width,
-            0x9898a5
+            0x4D4D4F,
+            this.mouseDirection === 'right',
           );
           this.pointsForHelpLines.push(nextStartPoint);
           this.group.add(subRes);
+          this.isOrientedLine = true;
         } else {
           const road = this.createRoad(
             this.pointsForHelpLines,
@@ -133,6 +146,7 @@ export class road {
             this.depth
           );
           this.group.add(road);
+          this.isOrientedLine = false;
         }
       }
     }
@@ -143,11 +157,6 @@ export class road {
       this.pointsForHelpLines.splice(0);
       this.scene.remove(
         this.scene.children.find((item) => item.name === "pointsForHelpLine")
-      );
-      this.container.removeEventListener(
-        "mousemove",
-        (e) => this.mouseMove(e),
-        false
       );
     }
   }
@@ -162,6 +171,29 @@ export class road {
       if (!intersects) return;
 
       if (startPoint) {
+        if (this.vec1) {
+          // 创建一个向量表示给定向量的方向
+          const vectorDirection = new THREE.Vector3(this.vec1.x, this.vec1.y, this.vec1.z);// 替换成给定向量的方向
+
+          // 创建一个向量表示起点到目标点的向量
+          const startPoint2 = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z); // 替换成起点坐标
+          const targetPoint = new THREE.Vector3(intersects.x, intersects.y, intersects.z); // 替换成目标点坐标
+          const pointVector = new THREE.Vector3().subVectors(targetPoint, startPoint2);
+
+          // 执行向量叉乘运算
+          const crossProduct = new THREE.Vector3();
+          crossProduct.crossVectors(vectorDirection, pointVector);
+
+
+          // 判断坐标点是否在向量的左侧或右侧
+          if (crossProduct.y > 0) {
+            this.mouseDirection = 'left';
+          } else if (crossProduct.y < 0) {
+            this.mouseDirection = 'right';
+          } else {
+            this.mouseDirection = 'middle';
+          }
+        }
         this.drawLineHelper(startPoint, intersects, 30);
       }
     }
@@ -214,10 +246,19 @@ export class road {
     texture.repeat.set(number, 1); // 调整重复纹理的次数
 
     // 创建基础几何体的材质，并将贴图分配给map属性
-    const material = new THREE.MeshBasicMaterial({
-      map: texture,
-      side: THREE.FrontSide,
-    });
+    // const material = new THREE.MeshBasicMaterial({
+    //   map: texture,
+    //   side: THREE.FrontSide,
+    // });
+    // 创建材质
+    const material = [
+      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 正面
+      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 背面
+      new THREE.MeshBasicMaterial({ map: texture }), // 顶面
+      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 底面
+      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 右侧面
+      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }) // 左侧面
+    ];
 
     // 创建基础几何体的几何体
     const geometry = new THREE.BoxGeometry(distance, depth, width);
@@ -232,7 +273,6 @@ export class road {
     const angleY = -Math.atan2(direction.z, direction.x); // 获取 Y 轴上的旋转角度
     const angleZ = Math.sin(direction.y); // 在此示例中，我们将 Z 轴的旋转角度设置为 0
 
-    console.log("angleZ", angleZ);
     mesh.rotation.set(angleX, angleY, angleZ);
 
     this.vec1 = direction;
@@ -276,7 +316,7 @@ export class road {
     return { leftTopPoint, leftBottomPoint, rightTopPoint, rightBottomPoint };
   }
 
-  createCylinder(position, radiusTop, radiusBottom) {
+  createCylinder(position, radiusTop, radiusBottom, color = 0x4d4d4f) {
     // 创建柱形几何体
     const geometry = new THREE.CylinderGeometry(
       radiusTop,
@@ -286,7 +326,7 @@ export class road {
     );
 
     // 创建材质
-    const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const material = new THREE.MeshBasicMaterial({ color });
 
     // 创建柱形
     const cylinder = new THREE.Mesh(geometry, material);
@@ -302,7 +342,7 @@ export class road {
     endPoint,
     r = 20,
     color = 0x3e3e3e,
-    isClockwise = true
+    isClockwise = false
   ) {
     let { direction, yAxisAngle, verticalVector } = this.getInfoBytwoPoint(
       startPoint,
@@ -319,11 +359,38 @@ export class road {
     //内层弧形
     heartShape.absarc(0, 0, r, Math.PI / 2, 0, true);
 
-    const extrudeSettings = { depth: 3, bevelEnabled: false };
+    const extrudeSettings = { depth: this.depth, bevelEnabled: false };
     const geometry = new THREE.ExtrudeGeometry(heartShape, extrudeSettings);
-    const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    const texture = new THREE.TextureLoader().load("assets/img/road.jpg");
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1); // 调整重复纹理的次数
+    const material = [
+      new THREE.MeshBasicMaterial({ color: 0x4d4d4f }), // 正面
+      new THREE.MeshBasicMaterial({ color: 0x4d4d4f }), // 背面
+      new THREE.MeshBasicMaterial({ map: texture }), // 顶面
+      new THREE.MeshBasicMaterial({ color: 0x4d4d4f }), // 底面
+      new THREE.MeshBasicMaterial({ color: 0x4d4d4f }), // 右侧面
+      new THREE.MeshBasicMaterial({ color: 0x4d4d4f }) // 左侧面
+    ];
     const subRes = new THREE.Mesh(geometry, material);
     subRes.name = "弯道";
+
+    subRes.material = new THREE.MeshBasicMaterial({ map: texture });
+    // 获取顶点信息
+    const vertices = geometry.attributes.position.array;
+
+    // 创建 UV 映射坐标
+    const uvs = [];
+    for (let i = 0; i < vertices.length; i += 9) {
+      // 为每个顶点创建 UV 映射坐标
+      uvs.push(0, 0, 1, 0, 1, 1);
+    }
+
+    // 设置 UV 属性
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+
 
     let arcPosition;
     // 获取弯道的初始坐标
@@ -338,7 +405,7 @@ export class road {
       // 本来应该转y,旋转后转z
       subRes.rotation.z = -yAxisAngle;
       // 0.5 是挤压厚度的一半
-
+      subRes.position.set(arcPosition.x, arcPosition.y - 1.5, arcPosition.z);
       const angle = Math.PI / 2;
       // 初始边向量  旋转度数 默认  Math.PI /2
 
@@ -361,7 +428,7 @@ export class road {
         (3 / 2) * r
       );
       // 0.5 是挤压厚度的一半
-
+      subRes.position.set(arcPosition.x, arcPosition.y + 1.5, arcPosition.z);
       const reverseVerticalVector = verticalVector.clone().negate();
       const angle = Math.PI / 2;
       const quaternion = new THREE.Quaternion().setFromAxisAngle(
@@ -375,15 +442,11 @@ export class road {
       // 旋转
       this.vec1 = rotatedVec;
     }
-    subRes.material.color = new THREE.Color(color);
-    subRes.position.set(arcPosition.x, arcPosition.y - 1.5, arcPosition.z);
     const nextStartPoint = this.getPointByVector(
       arcPosition,
       direction,
       (3 / 2) * r
     );
-    subRes.material.color = new THREE.Color(color);
-
     return { subRes, nextStartPoint };
   }
 
@@ -461,7 +524,16 @@ export class road {
       material = new THREE.LineBasicMaterial({ color });
       geometry = new THREE.BufferGeometry().setFromPoints(path.getPoints());
     } else {
+      // 定向画直线
       const points = [startPoint, intersects];
+      if (this.isOrientedLine) {
+        //给箭头设置一个起点(随便给个位置就行)
+        // const O = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z);
+        // // 红色箭头表示向量a
+        // const arrowA = new THREE.ArrowHelper(vector.clone().normalize(), O, vector.length() * 100, 0xff0000);
+        // this.scene.add(arrowA)
+        points.splice(1, 1, this.calcOritLinePoint(this.vec1.clone(), startPoint, intersects))
+      }
       geometry = new THREE.BufferGeometry().setFromPoints(points);
       material = new THREE.LineDashedMaterial({
         color,
@@ -470,55 +542,57 @@ export class road {
         dashSize: 100,
         gapSize: 300,
       });
+
     }
     const line = new THREE.Line(geometry, material);
     if (this.ctrlDown) {
       const yAxisAngle = this.getInitY(this.vec1);
-      line.rotation.x = -Math.PI / 2;
-      line.rotation.z = -yAxisAngle;
-
       const initPosition = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z);
       const verticalVector = this.getVerticalVector(this.vec1);
+      if (this.mouseDirection === 'right') {
 
-    
+        line.rotation.x = -Math.PI / 2;
+        line.rotation.z = -yAxisAngle;
+        let arcPosition = this.getPointByVector(
+          initPosition,
+          verticalVector,
+          (3 / 2) * radius
+        );
+        line.position.set(arcPosition.x, arcPosition.y + 3, arcPosition.z);
+      } else if (this.mouseDirection === 'left') {
 
+        line.rotation.x = Math.PI / 2;
+        line.rotation.z = yAxisAngle;
 
+        const reverseVector = verticalVector.clone().negate();
 
-
-      // 创建一个向量表示给定向量的方向
-      const vectorDirection = new THREE.Vector3(this.vec1.x, this.vec1.y, this.vec1.z);// 替换成给定向量的方向
-
-      // 创建一个向量表示起点到目标点的向量
-      const startPoint2 = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z); // 替换成起点坐标
-      const targetPoint = new THREE.Vector3(intersects.x, intersects.y, intersects.z); // 替换成目标点坐标
-      const pointVector = new THREE.Vector3().subVectors(targetPoint, startPoint2);
-
-      // 执行向量叉乘运算
-      const crossProduct = new THREE.Vector3();
-      crossProduct.crossVectors(vectorDirection, pointVector);
-
-
-      // 判断坐标点是否在向量的左侧或右侧
-      if (crossProduct.y > 0) {
-        console.log("坐标点在向量的左侧");
-      } else if (crossProduct.y < 0) {
-        console.log("坐标点在向量的右侧");
-      } else {
-        console.log("坐标点在向量上");
+        let arcPosition = this.getPointByVector(
+          initPosition,
+          reverseVector,
+          (3 / 2) * radius
+        );
+        line.position.set(arcPosition.x, arcPosition.y + 3, arcPosition.z);
       }
-
-
-      let arcPosition = this.getPointByVector(
-        initPosition,
-        verticalVector,
-        (3 / 2) * radius
-      );
-      line.position.set(arcPosition.x, arcPosition.y + 3, arcPosition.z);
     }
     line.name = "pointsForHelpLine";
     this.scene.remove(
       this.scene.children.find((item) => item.name === "pointsForHelpLine")
     );
     this.scene.add(line);
+  }
+  // 计算定向点的坐标
+  calcOritLinePoint(vector, point, intersects) {
+    const pointToVector = intersects.clone().projectOnVector(vector);
+    // 计算投影向量的长度，即点到向量的距离
+    const distanceToVector = pointToVector.length();
+    console.log('distanceToVector', distanceToVector);
+
+    // 计算新坐标点
+    const perpendicularPoint = point.clone().add(vector.clone().multiplyScalar(distanceToVector));
+    return perpendicularPoint;
+  }
+  // todo 移除监听事件
+  destroyed() {
+
   }
 }

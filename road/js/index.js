@@ -97,7 +97,7 @@ function render() {
 
 
 const params = {
-  height: 10,
+  height: 50,
   width: 30,
   depth: 3,
   radiusTop: 1,
@@ -152,6 +152,7 @@ const cube = new THREE.Mesh(geometry2, material2);
 
 // 将网格对象添加到场景
 scene.add(cube);
+
 
 
 
