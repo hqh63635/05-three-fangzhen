@@ -69,9 +69,11 @@ function init() {
   });
   const planeMesh = new THREE.Mesh(planeGeo, planeMaterial);
   planeMesh.rotation.x = -Math.PI / 2;
+  planeMesh.name = 'planeMesh'
   scene.add(planeMesh);
 
   const grid = new THREE.GridHelper(3000, 100, 0x444d66, 0x2c3242);
+  grid.name = 'grid'
   scene.add(grid);
 
 }

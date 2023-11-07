@@ -92,6 +92,8 @@ export class road {
     if (!this.pointsForHelpState) return;
     if (!startPoint) return;
     if (e.button === 0) {
+      // 创建线段
+      const offset = this.width / 2 - 1;
       // 把坐标放到坐标数组中
       if (!this.ctrlDown) {
         this.pointsForHelpLines.push(startPoint);
@@ -101,16 +103,16 @@ export class road {
         const lastPoint = this.calcOritLinePoint(this.vec1.clone(), this.pointsForHelpLines[len - 2], startPoint)
         this.pointsForHelpLines.splice(len - 1, 1, lastPoint)
       }
+
       // 如果有两个点，则生成线段和墙体
       if (this.pointsForHelpLines.length >= 2) {
-        // 创建线段
-        const offset = this.width / 2 - 1;
+
         const {
           leftTopPoint,
           leftBottomPoint,
           rightTopPoint,
           rightBottomPoint,
-        } = this.getCornerPosition(this.pointsForHelpLines, offset);
+        } = this.getCornerPosition(this.pointsForHelpLines.slice(-2), offset);
         const radiusTop = this.radiusTop;
         const radiusBottom = this.radiusBottom;
 
@@ -146,6 +148,34 @@ export class road {
             this.depth
           );
           this.group.add(road);
+          if (this.pointsForHelpLines.length >= 3 && !this.isOrientedLine) {
+            const first = [this.pointsForHelpLines.at(-3), this.pointsForHelpLines.at(-2)];
+            const second = [this.pointsForHelpLines.at(-2), this.pointsForHelpLines.at(-1)];
+            const {
+              leftTopPoint: first3,
+              leftBottomPoint: first4,
+              rightTopPoint: first1,
+              rightBottomPoint: first2,
+            } = this.getCornerPosition(first, this.width / 2);
+            const {
+              leftTopPoint: second3,
+              leftBottomPoint: second4,
+              rightTopPoint: second1,
+              rightBottomPoint: second2,
+            } = this.getCornerPosition(second, this.width / 2);
+            let intersectionPoint;
+            if (this.mouseDirection === 'left') {
+              intersectionPoint = this.getIntersection(first3, first4, second4, second3);
+              const mesh = this.createCube({ v3: this.pointsForHelpLines.at(-2), v4: second3, v7: intersectionPoint, v2: first4, height: 3 }, false);
+              mesh.position.y = mesh.position.y + this.depth / 2
+              this.group.add(mesh);
+            } else {
+              intersectionPoint = this.getIntersection(first1, first2, second2, second1);
+              const mesh = this.createCube({ v3: this.pointsForHelpLines.at(-2), v4: second1, v7: intersectionPoint, v2: first2, height: 3 });
+              mesh.position.y = mesh.position.y - this.depth / 2
+              this.group.add(mesh);
+            }
+          }
           this.isOrientedLine = false;
         }
       }
@@ -450,6 +480,98 @@ export class road {
     return { subRes, nextStartPoint };
   }
 
+  /**
+   * 创建不规则的几何体
+   * @param {*} param0 
+   * @returns 
+   */
+  createCube({ v3, v4, v7, v2, height } = params, isAdd = true) {
+    // ---------------------------------------------------------------------
+    // 创建一个立方体
+    // ---------------------------------------------------------------------
+    //    v6----- v5
+    //   /|      /|
+    //  v1------v0|
+    //  | |     | |
+    //  | |v7---|-|v4
+    //  |/      |/
+    //  v2------v3
+    const v0 = new THREE.Vector3(v3.x, isAdd ? v3.y + height : v3.y - height, v3.z);
+    const v5 = new THREE.Vector3(v4.x, isAdd ? v4.y + height : v4.y - height, v4.z);
+    const v6 = new THREE.Vector3(v7.x, isAdd ? v7.y + height : v7.y - height, v7.z);
+    const v1 = new THREE.Vector3(v2.x, isAdd ? v2.y + height : v2.y - height, v2.z);
+    // 创建立方体的顶点
+    const vertices = [
+      v0, // v0
+      v1, // v1
+      v2, // v2
+      v3, // v3
+      v4, // v4
+      v5, // v5
+      v6, // v6
+      v7 // v7
+    ];
+
+    const cubeGeometry = new THREE.BufferGeometry();
+    const verticesArray = new Float32Array(vertices.length * 3);
+    for (let i = 0; i < vertices.length; i++) {
+      verticesArray[i * 3] = vertices[i].x;
+      verticesArray[i * 3 + 1] = vertices[i].y;
+      verticesArray[i * 3 + 2] = vertices[i].z;
+    }
+    cubeGeometry.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
+
+
+
+    // 创建立方的面
+    const indices = [
+      0, 1, 2, 0, 2, 3, // front
+      0, 3, 4, 0, 4, 5, // right
+      1, 6, 7, 1, 7, 2, // left
+      6, 5, 4, 6, 4, 7, // back
+      5, 6, 1, 5, 1, 0, // top
+      3, 2, 7, 3, 7, 4 // bottom
+    ];
+    cubeGeometry.setIndex(indices);
+
+    // 生成法向量
+    cubeGeometry.computeVertexNormals();
+
+    // 创建 UV 映射坐标
+    const uvs = [
+      0, 0, 0, 1, 0, 0, 0, 1,  // 此示例为一个面贴图
+    ];
+
+    // 设置 UV 属性
+    cubeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    const texture = new THREE.TextureLoader().load("assets/img/road.jpg");
+
+    const cubeMaterial = new THREE.MeshLambertMaterial({ map: texture });
+    // const cubeMaterial = new THREE.MeshLambertMaterial({ color: 0x9B9BA5 });
+    const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+    cube.name = '补角';
+    return cube;
+  }
+
+  /**
+   * @description 两条射线的交点
+   * @param {*} vector1Start 
+   * @param {*} vector1End 
+   * @param {*} vector2Start 
+   * @param {*} vector2End 
+   */
+  getIntersection(vector1Start, vector1End, vector2Start, vector2End) {
+    // 创建射线
+    const ray = new THREE.Ray(vector1Start, vector1End.clone().sub(vector1Start).normalize());
+
+    // 创建平面
+    const plane = new THREE.Plane().setFromCoplanarPoints(vector2Start, vector2End, vector2Start.clone().cross(vector2End));
+    // 获取交点
+    const intersection = new THREE.Vector3();
+    ray.intersectPlane(plane, intersection);
+
+    return intersection;
+  }
   getPointByVector(startPoint, direction, distance) {
     // 标准化向量
     direction.normalize();
