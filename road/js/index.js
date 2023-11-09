@@ -2,11 +2,11 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-import { road } from "./road.js";
+import DoubleTrack from "./road.js";
+import SimEditor from '../../SimEditor.js';
 
 let renderer, scene, camera, orbit, container;
 
-let group = new THREE.Group();
 let control;
 
 init();
@@ -39,8 +39,6 @@ function init() {
   const HemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.8);
   scene.add(HemisphereLight);
 
-  scene.add(group);
-
   container.appendChild(renderer.domElement);
 
   orbit = new OrbitControls(camera, renderer.domElement);
@@ -50,16 +48,13 @@ function init() {
   // orbit.target.set(0, 0, 0);
   orbit.addEventListener("change", render);
 
-  control = new TransformControls(camera, container);
+  control = new TransformControls(camera, renderer.domElement);
   control.setMode("translate");
   scene.add(control);
 
-
   control.addEventListener('dragging-changed', (event) => {
     orbit.enabled = !event.value;
-    console.log(event.value, orbit.enabled)
   });
-  control.enabled = false;
 
   // 创建地板
   const planeGeo = new THREE.PlaneGeometry(3000, 3000);
@@ -73,9 +68,10 @@ function init() {
   scene.add(planeMesh);
 
   const grid = new THREE.GridHelper(3000, 100, 0x444d66, 0x2c3242);
-  grid.name = 'grid'
+  grid.name = 'grid';
   scene.add(grid);
 
+  SimEditor.getInstance().setParams(scene, camera, control);
 }
 
 function onWindowResize() {
@@ -102,36 +98,52 @@ const params = {
   height: 50,
   width: 30,
   depth: 3,
+  roadColor: 0xc7c7cc,
   radiusTop: 1,
   radiusBottom: 1,
   createObject: function () {
     // Callback function to create objects or perform actions
     // You can place your object creation code here
     console.log('Create button clicked');
-    road1.startDraw();
+    road1.startDraw(100, 50, 50);
   }
 };
-let road1 = new road(
+let road1 = new DoubleTrack(
   container,
-  scene,
-  camera,
-  group,
+  // scene,
+  // camera,
+  // control,
   params.height,
   params.width,
   params.depth,
+  params.roadColor,
   params.radiusTop,
   params.radiusBottom,
 );
 
 function updateParameters() {
-  const { height, width, depth, radiusTop, radiusBottom } = params;
-  road1.updateParameters(width, height, depth, radiusTop, radiusBottom);
+  const { height, width, depth, roadColor, radiusTop, radiusBottom } = params;
+  road1.updateParameters(width, height, depth, roadColor, radiusTop, radiusBottom);
+}
+function handleColorChange(color) {
+  return function (value) {
+
+    if (typeof value === 'string') {
+
+      value = value.replace('#', '0x');
+
+    }
+
+    color.setHex(value);
+
+  };
 }
 
 const gui = new GUI();
 gui.add(params, 'height', 1, 100).onChange(updateParameters);
 gui.add(params, 'width', 10, 100).onChange(updateParameters);
 gui.add(params, 'depth', 1, 10).onChange(updateParameters);
+gui.addColor(params, 'roadColor').onChange(updateParameters);
 
 const folder1 = gui.addFolder('圆柱');
 folder1.add(params, 'radiusTop', 0.5, 20).onChange(updateParameters);
@@ -144,14 +156,15 @@ window.scene = scene;
 
 
 // 创建立方体的几何体
-const geometry2 = new THREE.BoxGeometry(1, 1, 1); // 指定立方体的宽度、高度和深度
+const geometry2 = new THREE.BoxGeometry(10, 10, 10); // 指定立方体的宽度、高度和深度
 
 // 创建一个基础材质
 const material2 = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // 设置立方体的颜色
 
 // 使用几何体和材质创建网格对象
 const cube = new THREE.Mesh(geometry2, material2);
-
+cube.position.set(0, 5, 0);
+cube.name = 'cube';
 // 将网格对象添加到场景
 scene.add(cube);
 

@@ -1,65 +1,109 @@
 import * as THREE from "three";
+import { nanoid } from 'nanoid';
+import SimEditor from '../../SimEditor.js';
 
-export class road {
+export default class DoubleTrack {
   constructor(
     container,
-    scene,
-    camera,
-    group,
     height,
     width,
     depth,
+    roadColor,
     radiusTop,
     radiusBottom,
-    radiusColor = 0x4d4d4f
+    radiusColor = 0x4d4d4f,
   ) {
     this.container = container;
-    this.scene = scene;
-    this.group = group;
-    this.camera = camera;
+    this.scene = SimEditor.getInstance().scene;
+    this.camera = SimEditor.getInstance().camera;
+    this.control = SimEditor.getInstance().control;
+
 
     // 配置参数
     this.height = height;
     this.width = width;
     this.depth = depth;
+    this.roadColor = roadColor;
 
     this.radiusTop = radiusTop;
     this.radiusBottom = radiusBottom;
     this.radiusColor = radiusColor;
 
     // 全局参数
+    this.pointsForHelpLines = [];
     this.pointsForHelpState = false;
     this.isOrientedLine = false;
+    this.modelToken = '';
+    this.selectionBoxList = [];
+    this.sceneHelpers = new THREE.Group();
+
+    this.selectModel = null;
+
     // 控制旋转
     this.vec1 = null;
     // 方向 用于判断鼠标是否在向量的左侧还是右侧，还是中间
     this.mouseDirection = '';
 
     // 鼠标事件
-    this.mouseMoveObj = null;
+    this.mouseMoveEvent = null;
+    this.mouseDownEvent = null;
 
     this.init();
   }
 
   init() {
-    this.pointsForHelpLines = [];
+    this.scene.add(this.sceneHelpers);
 
     document.addEventListener("keydown", (event) => this.onKeyDown(event));
     document.addEventListener("keyup", (event) => this.onKeyUp(event));
-    this.container.addEventListener(
-      "mousedown",
-      (e) => this.onMouseDown(e),
-      false
-    );
-    this.container.addEventListener(
-      "mousemove",
-      (e) => this.mouseMove(e),
-      false
-    );
+
+    this.mouseMoveEvent = (e) => this.onMouseDown(e);
+    this.mouseDownEvent = (e) => this.mouseMove(e);
+
+    this.container.addEventListener("mousedown", this.mouseMoveEvent, false);
+    this.container.addEventListener("mousemove", this.mouseDownEvent, false);
   }
 
   startDraw(state = true) {
     this.pointsForHelpState = state;
+    this.pointsForHelpLines = [];
+    this.modelToken = nanoid();
+  }
+
+  initDraw(length, width, height, state = true) {
+    this.pointsForHelpState = state;
+    this.pointsForHelpLines = [];
+    this.modelToken = nanoid();
+
+    this.createGroup();
+
+    this.width = width;
+    this.height = height;
+    this.depth = 3;
+
+    const startPoint = new THREE.Vector3(0, this.height, 0);
+    const endPoint = new THREE.Vector3(length, this.height, 0);
+    this.pointsForHelpLines.push(startPoint, endPoint);
+
+    const road = this.createRoad(
+      this.pointsForHelpLines,
+      this.width,
+      this.depth
+    );
+    this.getModelByModelToken(this.modelToken).add(road);
+  }
+
+  createGroup() {
+    const group = new THREE.Group();
+    group.name = `group${this.modelToken}`;
+    group.fileData = {
+      name: 'group',
+      type: 'track',
+      modelToken: this.modelToken,
+      isCreated: false,
+      pointsForHelpLines: [],
+    }
+    SimEditor.getInstance().addMus(group);
   }
 
   getCoord(e) {
@@ -88,6 +132,31 @@ export class road {
 
   onMouseDown(e) {
     e.stopPropagation();
+    // 清除辅助框
+    this.selectModel = null;
+    this.clearSelectionBoxList();
+
+    if (this.modelToken && this.getModelByModelToken(this.modelToken) && this.getModelByModelToken(this.modelToken).fileData.isCreated) {
+      const raycaster = new THREE.Raycaster(); //光线投射，用于确定鼠标点击位置
+      let mouse = new THREE.Vector2(); //创建二维平面
+      mouse.x = (e.clientX / container.offsetWidth) * 2 - 1;
+      mouse.y = -((e.clientY / container.offsetHeight) * 2) + 1;
+      //以camera为z坐标，确定所点击物体的3D空间位置
+      raycaster.setFromCamera(mouse, this.camera);
+      const intersectsObjs = this.scene.children.filter((v) => {
+        return v.fileData?.type === 'track';
+      });
+      const intersects = raycaster.intersectObjects(intersectsObjs, true);
+      if (intersects.length) {
+        this.showSelectionBox(intersects[0].object.parent);
+        this.selectModel = intersects[0].object.parent;
+        // this.control.attach(this.getModelByModelToken(this.modelToken));
+      } else {
+        this.selectModel = null;
+      }
+    } else {
+
+    }
     const startPoint = this.getCoord(e);
     if (!this.pointsForHelpState) return;
     if (!startPoint) return;
@@ -106,7 +175,16 @@ export class road {
 
       // 如果有两个点，则生成线段和墙体
       if (this.pointsForHelpLines.length >= 2) {
-
+        if (!this.getModelByModelToken(this.modelToken)) {
+          this.createGroup();
+        }
+        if (this.getModelByModelToken(this.modelToken).fileData.pointsForHelpLines.length === 0) {
+          this.getModelByModelToken(this.modelToken).fileData.pointsForHelpLines.push({
+            type: 'lineRoad',
+            mouseDirection: this.mouseDirection,
+            point: this.pointsForHelpLines[this.pointsForHelpLines.length - 2],
+          });
+        }
         const {
           leftTopPoint,
           leftBottomPoint,
@@ -123,7 +201,7 @@ export class road {
           rightBottomPoint,
         ]) {
           const cylinder = this.createCylinder(point, radiusTop, radiusBottom, this.radiusColor);
-          this.group.add(cylinder);
+          this.getModelByModelToken(this.modelToken).add(cylinder);
         }
 
         if (this.ctrlDown) {
@@ -131,23 +209,31 @@ export class road {
             this.pointsForHelpLines[this.pointsForHelpLines.length - 2]; // 起点坐标
           const endPoint =
             this.pointsForHelpLines[this.pointsForHelpLines.length - 1]; // 终点坐标
-          const { subRes, nextStartPoint } = this.createbend(
+          const { subRes, nextStartPoint } = this.createBend(
             startPoint,
             endPoint,
             this.width,
-            0x4D4D4F,
             this.mouseDirection === 'right',
+            this.vec1
           );
           this.pointsForHelpLines.push(nextStartPoint);
-          this.group.add(subRes);
+          this.getModelByModelToken(this.modelToken).add(subRes);
           this.isOrientedLine = true;
+
+          this.getModelByModelToken(this.modelToken).fileData.pointsForHelpLines.push({
+            type: 'bendRoad',
+            mouseDirection: this.mouseDirection,
+            point: this.pointsForHelpLines[this.pointsForHelpLines.length - 1],
+          });
         } else {
           const road = this.createRoad(
             this.pointsForHelpLines,
             this.width,
             this.depth
           );
-          this.group.add(road);
+
+          this.getModelByModelToken(this.modelToken).add(road);
+
           if (this.pointsForHelpLines.length >= 3 && !this.isOrientedLine) {
             const first = [this.pointsForHelpLines.at(-3), this.pointsForHelpLines.at(-2)];
             const second = [this.pointsForHelpLines.at(-2), this.pointsForHelpLines.at(-1)];
@@ -166,16 +252,22 @@ export class road {
             let intersectionPoint;
             if (this.mouseDirection === 'left') {
               intersectionPoint = this.getIntersection(first3, first4, second4, second3);
-              const mesh = this.createCube({ v3: this.pointsForHelpLines.at(-2), v4: second3, v7: intersectionPoint, v2: first4, height: 3 }, false);
+              const mesh = this.createCube({ v3: this.pointsForHelpLines.at(-2), v4: second3, v7: intersectionPoint, v2: first4, height: this.depth }, false);
               mesh.position.y = mesh.position.y + this.depth / 2
-              this.group.add(mesh);
+              this.getModelByModelToken(this.modelToken).add(mesh);
             } else {
               intersectionPoint = this.getIntersection(first1, first2, second2, second1);
-              const mesh = this.createCube({ v3: this.pointsForHelpLines.at(-2), v4: second1, v7: intersectionPoint, v2: first2, height: 3 });
+              const mesh = this.createCube({ v3: this.pointsForHelpLines.at(-2), v4: second1, v7: intersectionPoint, v2: first2, height: this.depth });
               mesh.position.y = mesh.position.y - this.depth / 2
-              this.group.add(mesh);
+              this.getModelByModelToken(this.modelToken).add(mesh);
             }
           }
+          this.getModelByModelToken(this.modelToken).fileData.pointsForHelpLines.push({
+            type: 'lineRoad',
+            mouseDirection: this.mouseDirection,
+            point: this.pointsForHelpLines[this.pointsForHelpLines.length - 1],
+          });
+
           this.isOrientedLine = false;
         }
       }
@@ -183,11 +275,7 @@ export class road {
 
     // 停止
     if (e.button === 2) {
-      this.pointsForHelpState = false;
-      this.pointsForHelpLines.splice(0);
-      this.scene.remove(
-        this.scene.children.find((item) => item.name === "pointsForHelpLine")
-      );
+      this.finishMouseDown();
     }
   }
 
@@ -229,21 +317,151 @@ export class road {
     }
   }
 
-  updateParameters(width, height, depth, radiusTop, radiusBottom) {
+  /**
+   * 完成绘制
+   */
+  finishMouseDown() {
+    const group = this.getModelByModelToken(this.modelToken);
+    if (group) {
+      group.fileData.isCreated = true;
+      group.fileData.width = this.width;
+      group.fileData.height = this.height;
+      group.fileData.depth = this.depth;
+      group.fileData.roadColor = this.roadColor;
+    }
+
+    this.pointsForHelpState = false;
+    this.pointsForHelpLines.splice(0);
+    this.isOrientedLine = false;
+    // 控制旋转
+    this.vec1 = null;
+    // 方向 用于判断鼠标是否在向量的左侧还是右侧，还是中间
+    this.mouseDirection = '';
+
+    // this.destroyed();
+
+    SimEditor.getInstance().delMus(
+      this.scene.children.find((item) => item.name === "pointsForHelpLine")
+    );
+  }
+
+  updateParameters(width, height, depth, roadColor, radiusTop, radiusBottom) {
     this.height = height;
     this.width = width;
     this.depth = depth;
+    this.roadColor = roadColor;
 
     this.radiusTop = radiusTop;
     this.radiusBottom = radiusBottom;
 
-    this.createRoadGeometry();
+    this.updateRoadGeometry(roadColor);
   }
 
-  createRoadGeometry() {
-    // this.scene.remove(this.roadMesh);
-    // this.roadMesh = new THREE.Mesh(newGeometry, newMaterial);
-    // this.scene.add(this.roadMesh);
+  updateRoadGeometry(roadColor) {
+    if (this.selectModel) {
+      const modelToken = this.selectModel.fileData.modelToken;
+      this.selectModel.children.forEach((n) => {
+        this.selectModel.remove(n);
+      });
+      this.selectModel.children.forEach((child) => {
+        if (child.fileData?.type === 'lineRoad') {
+          child.material[2].color.setHex(roadColor);
+        } else if (['bendRoad', 'angleRoad'].includes(child.fileData?.type)) {
+          child.material.color.setHex(roadColor);
+        }
+      });
+      const arr = this.selectModel.fileData.pointsForHelpLines;
+      let vec = null;
+      for (let i = 1; i < arr.length; i += 1) {
+        if (i >= 1) {
+          const { direction } = this.getInfoBytwoPoint(
+            arr[i - 1].point,
+            arr[i].point
+          );
+          if (arr[i].type === 'lineRoad') {
+            console.log('111')
+            vec = direction;
+          } else {
+            const verticalVector = this.getVerticalVector(vec);
+            const angle = Math.PI / 2;
+            if (arr[i].mouseDirection === 'right') {
+              const quaternion = new THREE.Quaternion().setFromAxisAngle(
+                verticalVector,
+                angle
+              );
+              // const v = new THREE.Vector3(1,0,0); // 原始向量
+              const rotatedVec = verticalVector.clone().applyQuaternion(quaternion); // 绕轴旋转后的向量
+              // 给下一次的初始旋转向量赋值
+              vec = rotatedVec;
+            } else {
+              const reverseVerticalVector = verticalVector.clone().negate();
+              const angle = Math.PI / 2;
+              const quaternion = new THREE.Quaternion().setFromAxisAngle(
+                reverseVerticalVector,
+                angle
+              );
+              // const v = new THREE.Vector3(1,0,0); // 原始向量
+              const rotatedVec = reverseVerticalVector
+                .clone()
+                .applyQuaternion(quaternion); // 绕轴旋转后的向量
+              // 旋转
+              vec = rotatedVec;
+            }
+          }
+          if (arr[i].type === 'lineRoad') {
+            const road = this.createRoad(
+              [arr[i].point, arr[i - 1].point],
+              this.width,
+              this.depth,
+            );
+            console.log(this.selectModel.fileData.pointsForHelpLines);
+            this.getModelByModelToken(modelToken).add(road);
+          } else {
+            const startPoint =
+              arr[i - 2].point; // 起点坐标
+            const endPoint =
+              arr[i - 1].point; // 终点坐标
+            const { subRes, nextStartPoint } = this.createBend(
+              startPoint,
+              endPoint,
+              this.width,
+              arr[i].mouseDirection === 'right',
+              vec
+            );
+            this.getModelByModelToken(this.modelToken).add(subRes);
+          }
+
+        }
+        if (i >= 2 && arr[i].type === 'lineRoad') {
+          const first = [arr[i - 2].point, arr[i - 1].point];
+          const second = [arr[i - 1].point, arr[i].point];
+          const {
+            leftTopPoint: first3,
+            leftBottomPoint: first4,
+            rightTopPoint: first1,
+            rightBottomPoint: first2,
+          } = this.getCornerPosition(first, this.width / 2);
+          const {
+            leftTopPoint: second3,
+            leftBottomPoint: second4,
+            rightTopPoint: second1,
+            rightBottomPoint: second2,
+          } = this.getCornerPosition(second, this.width / 2);
+          let intersectionPoint;
+          if (arr[i].mouseDirection === 'left') {
+            intersectionPoint = this.getIntersection(first3, first4, second4, second3);
+            const mesh = this.createCube({ v3: arr[i - 1].point, v4: second3, v7: intersectionPoint, v2: first4, height: this.depth }, false);
+            mesh.position.y = mesh.position.y + this.depth / 2
+            this.getModelByModelToken(modelToken).add(mesh);
+          } else {
+            intersectionPoint = this.getIntersection(first1, first2, second2, second1);
+            const mesh = this.createCube({ v3: arr[i - 1].point, v4: second1, v7: intersectionPoint, v2: first2, height: this.depth });
+            mesh.position.y = mesh.position.y - this.depth / 2
+            this.getModelByModelToken(modelToken).add(mesh);
+          }
+        }
+      }
+    }
   }
 
   onKeyDown(event) {
@@ -268,12 +486,12 @@ export class road {
       endPoint
     );
 
-    const number = parseInt(distance / 50, 10);
-    // 创建贴图（纹理）
-    const texture = new THREE.TextureLoader().load("assets/img/road.jpg");
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(number, 1); // 调整重复纹理的次数
+    // // 创建贴图（纹理）
+    // const number = parseInt(distance / 50, 10);
+    // const texture = new THREE.TextureLoader().load("assets/img/road.jpg");
+    // texture.wrapS = THREE.RepeatWrapping;
+    // texture.wrapT = THREE.RepeatWrapping;
+    // texture.repeat.set(number, 1); // 调整重复纹理的次数
 
     // 创建基础几何体的材质，并将贴图分配给map属性
     // const material = new THREE.MeshBasicMaterial({
@@ -284,7 +502,8 @@ export class road {
     const material = [
       new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 正面
       new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 背面
-      new THREE.MeshBasicMaterial({ map: texture }), // 顶面
+      // new THREE.MeshBasicMaterial({ map: texture }), // 顶面
+      new THREE.MeshBasicMaterial({ color: this.roadColor }), // 底面
       new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 底面
       new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 右侧面
       new THREE.MeshBasicMaterial({ color: 0x4D4D4F }) // 左侧面
@@ -304,6 +523,10 @@ export class road {
     const angleZ = Math.sin(direction.y); // 在此示例中，我们将 Z 轴的旋转角度设置为 0
 
     mesh.rotation.set(angleX, angleY, angleZ);
+    mesh.name = '直路';
+    mesh.fileData = {
+      type: 'lineRoad',
+    }
 
     this.vec1 = direction;
     return mesh;
@@ -360,6 +583,10 @@ export class road {
 
     // 创建柱形
     const cylinder = new THREE.Mesh(geometry, material);
+    cylinder.name = '柱子';
+    cylinder.fileData = {
+      type: 'cylinder',
+    }
 
     // 设置柱形的位置
     cylinder.position.set(position.x, position.y / 2, position.z);
@@ -367,21 +594,21 @@ export class road {
     return cylinder;
   }
 
-  createbend(
+  createBend(
     startPoint,
     endPoint,
     r = 20,
-    color = 0x3e3e3e,
-    isClockwise = false
+    isClockwise = false,
+    vec
   ) {
     let { direction, yAxisAngle, verticalVector } = this.getInfoBytwoPoint(
       startPoint,
       endPoint
     );
-    if (this.vec1) {
-      direction = this.vec1;
-      yAxisAngle = this.getInitY(this.vec1);
-      verticalVector = this.getVerticalVector(this.vec1);
+    if (vec) {
+      direction = vec;
+      yAxisAngle = this.getInitY(vec);
+      verticalVector = this.getVerticalVector(vec);
     }
 
     const heartShape = new THREE.Shape();
@@ -392,6 +619,17 @@ export class road {
     const extrudeSettings = { depth: this.depth, bevelEnabled: false };
     const geometry = new THREE.ExtrudeGeometry(heartShape, extrudeSettings);
 
+    // 获取顶点信息
+    const vertices = geometry.attributes.position.array;
+    // 创建 UV 映射坐标
+    const uvs = [];
+    for (let i = 0; i < vertices.length; i += 9) {
+      // 为每个顶点创建 UV 映射坐标
+      uvs.push(0, 0, 1, 1, 1, 1);
+    }
+    // 设置 UV 属性
+    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+
     const texture = new THREE.TextureLoader().load("assets/img/road.jpg");
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -399,27 +637,19 @@ export class road {
     const material = [
       new THREE.MeshBasicMaterial({ color: 0x4d4d4f }), // 正面
       new THREE.MeshBasicMaterial({ color: 0x4d4d4f }), // 背面
-      new THREE.MeshBasicMaterial({ map: texture }), // 顶面
+      // new THREE.MeshBasicMaterial({ map: texture }), // 顶面
+      new THREE.MeshBasicMaterial({ color: this.roadColor }),
       new THREE.MeshBasicMaterial({ color: 0x4d4d4f }), // 底面
       new THREE.MeshBasicMaterial({ color: 0x4d4d4f }), // 右侧面
       new THREE.MeshBasicMaterial({ color: 0x4d4d4f }) // 左侧面
     ];
     const subRes = new THREE.Mesh(geometry, material);
     subRes.name = "弯道";
-
-    subRes.material = new THREE.MeshBasicMaterial({ map: texture });
-    // 获取顶点信息
-    const vertices = geometry.attributes.position.array;
-
-    // 创建 UV 映射坐标
-    const uvs = [];
-    for (let i = 0; i < vertices.length; i += 9) {
-      // 为每个顶点创建 UV 映射坐标
-      uvs.push(0, 0, 1, 0, 1, 1);
+    subRes.fileData = {
+      type: 'bendRoad',
     }
 
-    // 设置 UV 属性
-    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    subRes.material = new THREE.MeshBasicMaterial({ color: this.roadColor });
 
 
     let arcPosition;
@@ -472,6 +702,10 @@ export class road {
       // 旋转
       this.vec1 = rotatedVec;
     }
+    // const O = new THREE.Vector3(endPoint.x, endPoint.y, endPoint.z);
+    // // 红色箭头表示向量a
+    // const arrowA = new THREE.ArrowHelper(this.vec1.clone().normalize(), O, this.vec1.length() * 100, 0xff0000);
+    // this.scene.add(arrowA)
     const nextStartPoint = this.getPointByVector(
       arcPosition,
       direction,
@@ -544,12 +778,15 @@ export class road {
 
     // 设置 UV 属性
     cubeGeometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-    const texture = new THREE.TextureLoader().load("assets/img/road.jpg");
+    // const texture = new THREE.TextureLoader().load("assets/img/road.jpg");
 
-    const cubeMaterial = new THREE.MeshLambertMaterial({ map: texture });
-    // const cubeMaterial = new THREE.MeshLambertMaterial({ color: 0x9B9BA5 });
+    // const cubeMaterial = new THREE.MeshLambertMaterial({ map: texture });
+    const cubeMaterial = new THREE.MeshBasicMaterial({ color: this.roadColor });
     const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
     cube.name = '补角';
+    cube.fileData = {
+      type: 'angleRoad',
+    }
     return cube;
   }
 
@@ -697,24 +934,63 @@ export class road {
       }
     }
     line.name = "pointsForHelpLine";
-    this.scene.remove(
+    SimEditor.getInstance().delMus(
       this.scene.children.find((item) => item.name === "pointsForHelpLine")
     );
-    this.scene.add(line);
+    line.traverse((child) => {
+      child.fileData = {
+        type: 'track',
+        modelToken: nanoid(),
+      };
+    });
+    SimEditor.getInstance().addMus(line);
   }
   // 计算定向点的坐标
   calcOritLinePoint(vector, point, intersects) {
     const pointToVector = intersects.clone().projectOnVector(vector);
     // 计算投影向量的长度，即点到向量的距离
     const distanceToVector = pointToVector.length();
-    console.log('distanceToVector', distanceToVector);
 
     // 计算新坐标点
     const perpendicularPoint = point.clone().add(vector.clone().multiplyScalar(distanceToVector));
     return perpendicularPoint;
   }
+
+
+  // 显示辅助盒模型
+  showSelectionBox(model) {
+    const box = new THREE.Box3(); // 辅助包围盒
+    const selectionBox = new THREE.BoxHelper();
+    selectionBox.material.depthTest = false;
+    selectionBox.material.transparent = true;
+    selectionBox.visible = true;
+    this.sceneHelpers.add(selectionBox);
+    this.selectionBoxList.push(selectionBox);
+    box.setFromObject(model);
+    selectionBox.setFromObject(model);
+  }
+
+  getModelByModelToken(modelToken) {
+    let model;
+    this.scene.children.forEach((obj) => {
+      if (obj.fileData?.modelToken === modelToken) {
+        model = obj;
+      }
+    });
+    return model;
+  }
+
+  // 清空选中框
+  clearSelectionBoxList() {
+    this.selectionBoxList.forEach((box) => {
+      box.visible = false;
+      this.sceneHelpers.remove(box);
+    });
+  };
+
   // todo 移除监听事件
   destroyed() {
-
+    this.container.removeEventListener("mousedown", this.mouseMoveEvent, false);
+    this.container.removeEventListener("mousemove", this.mouseDownEvent, false);
   }
 }
