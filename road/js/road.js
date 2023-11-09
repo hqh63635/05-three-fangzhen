@@ -374,40 +374,6 @@ export default class DoubleTrack {
       let vec = null;
       for (let i = 1; i < arr.length; i += 1) {
         if (i >= 1) {
-          const { direction } = this.getInfoBytwoPoint(
-            arr[i - 1].point,
-            arr[i].point
-          );
-          if (arr[i].type === 'lineRoad') {
-            console.log('111')
-            vec = direction;
-          } else {
-            const verticalVector = this.getVerticalVector(vec);
-            const angle = Math.PI / 2;
-            if (arr[i].mouseDirection === 'right') {
-              const quaternion = new THREE.Quaternion().setFromAxisAngle(
-                verticalVector,
-                angle
-              );
-              // const v = new THREE.Vector3(1,0,0); // 原始向量
-              const rotatedVec = verticalVector.clone().applyQuaternion(quaternion); // 绕轴旋转后的向量
-              // 给下一次的初始旋转向量赋值
-              vec = rotatedVec;
-            } else {
-              const reverseVerticalVector = verticalVector.clone().negate();
-              const angle = Math.PI / 2;
-              const quaternion = new THREE.Quaternion().setFromAxisAngle(
-                reverseVerticalVector,
-                angle
-              );
-              // const v = new THREE.Vector3(1,0,0); // 原始向量
-              const rotatedVec = reverseVerticalVector
-                .clone()
-                .applyQuaternion(quaternion); // 绕轴旋转后的向量
-              // 旋转
-              vec = rotatedVec;
-            }
-          }
           if (arr[i].type === 'lineRoad') {
             const road = this.createRoad(
               [arr[i].point, arr[i - 1].point],
@@ -460,7 +426,42 @@ export default class DoubleTrack {
             this.getModelByModelToken(modelToken).add(mesh);
           }
         }
+        const { direction } = this.getInfoBytwoPoint(
+          arr[i - 1].point,
+          arr[i].point
+        );
+        if (arr[i].type === 'lineRoad') {
+          console.log('111')
+          vec = direction;
+        } else {
+          const verticalVector = this.getVerticalVector(vec);
+          const angle = Math.PI / 2;
+          if (arr[i].mouseDirection === 'right') {
+            const quaternion = new THREE.Quaternion().setFromAxisAngle(
+              verticalVector,
+              angle
+            );
+            // const v = new THREE.Vector3(1,0,0); // 原始向量
+            const rotatedVec = verticalVector.clone().applyQuaternion(quaternion); // 绕轴旋转后的向量
+            // 给下一次的初始旋转向量赋值
+            vec = rotatedVec;
+          } else {
+            const reverseVerticalVector = verticalVector.clone().negate();
+            const angle = Math.PI / 2;
+            const quaternion = new THREE.Quaternion().setFromAxisAngle(
+              reverseVerticalVector,
+              angle
+            );
+            // const v = new THREE.Vector3(1,0,0); // 原始向量
+            const rotatedVec = reverseVerticalVector
+              .clone()
+              .applyQuaternion(quaternion); // 绕轴旋转后的向量
+            // 旋转
+            vec = rotatedVec;
+          }
+        }
       }
+      
     }
   }
 
@@ -610,6 +611,7 @@ export default class DoubleTrack {
       yAxisAngle = this.getInitY(vec);
       verticalVector = this.getVerticalVector(vec);
     }
+    console.log('111', vec)
 
     const heartShape = new THREE.Shape();
     heartShape.absarc(0, 0, r * 2, 0, Math.PI / 2);
