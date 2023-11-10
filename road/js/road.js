@@ -296,8 +296,8 @@ export default class DoubleTrack {
 
   updateRoadGeometry(roadColor) {
     if (this.selectModel) {
-      const { modelToken, pointsForHelpLines: arr } = this.selectModel.fileData;
-      console.log('arr', JSON.stringify(arr));
+      const { modelToken, pointsForHelpLines } = this.selectModel.fileData;
+
       const target = this.getModelByModelToken(modelToken);
 
       // 移除
@@ -312,6 +312,7 @@ export default class DoubleTrack {
       });
 
       let vec = null;
+      const arr = this.updatePoint(pointsForHelpLines);
       for (let i = 1; i < arr.length; i += 1) {
         if (i >= 1) {
           if (arr[i].type === 'lineRoad') {
@@ -378,20 +379,20 @@ export default class DoubleTrack {
     }
   }
 
-  updatePoint(list) {
+  updatePoint(arr) {
     let newPoints = [];
     let vec = null;
-    for (let i = 1; i < list.length; i += 1) {
+    for (let i = 1; i < arr.length; i += 1) {
       if (i === 0) {
         newPoints.push(arr[i]);
       } else if (i >= 1) {
         if (arr[i].type === 'lineRoad') {
           let { direction, distance } = this.getInfoBytwoPoint(
-            arr[i - 1],
-            arr[i]
+            arr[i - 1].point,
+            arr[i].point
           );
-          const endPoint = getPointByVector(arr[i - 1], direction, distance);
-          endPoint.push(endPoint)
+          const endPoint = this.getPointByVector(arr[i - 1].point, direction, distance);
+          newPoints.push(endPoint);
         } else {
           const { nextStartPoint } = this.createBend(
             arr[i - 2].point,
@@ -400,7 +401,7 @@ export default class DoubleTrack {
             arr[i].mouseDirection === 'right',
             vec
           );
-          endPoint.push(nextStartPoint);
+          newPoints.push(nextStartPoint);
         }
         if (arr[i].type === 'lineRoad') {
           vec = direction;
@@ -431,6 +432,7 @@ export default class DoubleTrack {
           }
         }
       }
+      return newPoints;
     }
   }
   onKeyDown(event) {
