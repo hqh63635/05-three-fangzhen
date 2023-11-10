@@ -105,14 +105,14 @@ const params = {
     // Callback function to create objects or perform actions
     // You can place your object creation code here
     console.log('Create button clicked');
-    road1.startDraw(100, 50, 50);
+    road1.startDraw();
+  },
+  initObject: () => {
+    road1.initDraw(100, 50, 50);
   }
 };
 let road1 = new DoubleTrack(
   container,
-  // scene,
-  // camera,
-  // control,
   params.height,
   params.width,
   params.depth,
@@ -125,19 +125,6 @@ function updateParameters() {
   const { height, width, depth, roadColor, radiusTop, radiusBottom } = params;
   road1.updateParameters(width, height, depth, roadColor, radiusTop, radiusBottom);
 }
-function handleColorChange(color) {
-  return function (value) {
-
-    if (typeof value === 'string') {
-
-      value = value.replace('#', '0x');
-
-    }
-
-    color.setHex(value);
-
-  };
-}
 
 const gui = new GUI();
 gui.add(params, 'height', 1, 100).onChange(updateParameters);
@@ -149,8 +136,11 @@ const folder1 = gui.addFolder('圆柱');
 folder1.add(params, 'radiusTop', 0.5, 20).onChange(updateParameters);
 folder1.add(params, 'radiusBottom', 0.5, 20).onChange(updateParameters);
 
+const folder3 = gui.addFolder('初始化');
+folder3.add(params, 'initObject').name('initCreate'); // Add the Create button
+
 const folder2 = gui.addFolder('启动');
-folder2.add(params, 'createObject').name('Create'); // Add the Create button
+folder2.add(params, 'createObject').name('Create');
 
 window.scene = scene;
 
@@ -167,7 +157,6 @@ cube.position.set(0, 5, 0);
 cube.name = 'cube';
 // 将网格对象添加到场景
 scene.add(cube);
-
 
 
 

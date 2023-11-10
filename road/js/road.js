@@ -104,186 +104,13 @@ export default class DoubleTrack {
       pointsForHelpLines: [],
     }
     SimEditor.getInstance().addMus(group);
-  }
-
-  getCoord(e) {
-    const raycaster = new THREE.Raycaster(); //光线投射，用于确定鼠标点击位置
-    let mouse = new THREE.Vector2(); //创建二维平面
-    mouse.x = (e.clientX / container.offsetWidth) * 2 - 1;
-    mouse.y = -((e.clientY / container.offsetHeight) * 2) + 1;
-    //以camera为z坐标，确定所点击物体的3D空间位置
-    raycaster.setFromCamera(mouse, this.camera);
-
-    // 创建虚拟平面
-    const normal = new THREE.Vector3(0, 1, 0);
-
-    const constant = -this.height; // 0 表示平面过原点，可以根据需求调整
-    const planeGround = new THREE.Plane(normal, constant);
-
-    // 计算相机到射线的对象，可能有多个对象，返回一个数组，按照相机距离远近排列
-    const intersects = raycaster.ray.intersectPlane(
-      planeGround,
-      new THREE.Vector3(0, 0, 0)
-    );
-
-    //选中后进行的操作
-    return intersects;
-  }
-
-  onMouseDown(e) {
-    e.stopPropagation();
-    // 清除辅助框
-    this.selectModel = null;
-    this.clearSelectionBoxList();
-
-    if (this.modelToken && this.getModelByModelToken(this.modelToken) && this.getModelByModelToken(this.modelToken).fileData.isCreated) {
-      const raycaster = new THREE.Raycaster(); //光线投射，用于确定鼠标点击位置
-      let mouse = new THREE.Vector2(); //创建二维平面
-      mouse.x = (e.clientX / container.offsetWidth) * 2 - 1;
-      mouse.y = -((e.clientY / container.offsetHeight) * 2) + 1;
-      //以camera为z坐标，确定所点击物体的3D空间位置
-      raycaster.setFromCamera(mouse, this.camera);
-      const intersectsObjs = this.scene.children.filter((v) => {
-        return v.fileData?.type === 'track';
-      });
-      const intersects = raycaster.intersectObjects(intersectsObjs, true);
-      if (intersects.length) {
-        this.showSelectionBox(intersects[0].object.parent);
-        this.selectModel = intersects[0].object.parent;
-        // this.control.attach(this.getModelByModelToken(this.modelToken));
-      } else {
-        this.selectModel = null;
-      }
-    } else {
-
-    }
-    const startPoint = this.getCoord(e);
-    if (!this.pointsForHelpState) return;
-    if (!startPoint) return;
-    if (e.button === 0) {
-      // 创建线段
-      const offset = this.width / 2 - 1;
-      // 把坐标放到坐标数组中
-      if (!this.ctrlDown) {
-        this.pointsForHelpLines.push(startPoint);
-      }
-      if (this.isOrientedLine && !this.ctrlDown) {
-        const len = this.pointsForHelpLines.length;
-        const lastPoint = this.calcOritLinePoint(this.vec1.clone(), this.pointsForHelpLines[len - 2], startPoint)
-        this.pointsForHelpLines.splice(len - 1, 1, lastPoint)
-      }
-
-      // 如果有两个点，则生成线段和墙体
-      if (this.pointsForHelpLines.length >= 2) {
-        if (!this.getModelByModelToken(this.modelToken)) {
-          this.createGroup();
-        }
-        if (this.getModelByModelToken(this.modelToken).fileData.pointsForHelpLines.length === 0) {
-          this.getModelByModelToken(this.modelToken).fileData.pointsForHelpLines.push({
-            type: 'lineRoad',
-            mouseDirection: this.mouseDirection,
-            point: this.pointsForHelpLines[this.pointsForHelpLines.length - 2],
-          });
-        }
-        const {
-          leftTopPoint,
-          leftBottomPoint,
-          rightTopPoint,
-          rightBottomPoint,
-        } = this.getCornerPosition(this.pointsForHelpLines.slice(-2), offset);
-        const radiusTop = this.radiusTop;
-        const radiusBottom = this.radiusBottom;
-
-        for (const point of [
-          leftTopPoint,
-          leftBottomPoint,
-          rightTopPoint,
-          rightBottomPoint,
-        ]) {
-          const cylinder = this.createCylinder(point, radiusTop, radiusBottom, this.radiusColor);
-          this.getModelByModelToken(this.modelToken).add(cylinder);
-        }
-
-        if (this.ctrlDown) {
-          const startPoint =
-            this.pointsForHelpLines[this.pointsForHelpLines.length - 2]; // 起点坐标
-          const endPoint =
-            this.pointsForHelpLines[this.pointsForHelpLines.length - 1]; // 终点坐标
-          const { subRes, nextStartPoint } = this.createBend(
-            startPoint,
-            endPoint,
-            this.width,
-            this.mouseDirection === 'right',
-            this.vec1
-          );
-          this.pointsForHelpLines.push(nextStartPoint);
-          this.getModelByModelToken(this.modelToken).add(subRes);
-          this.isOrientedLine = true;
-
-          this.getModelByModelToken(this.modelToken).fileData.pointsForHelpLines.push({
-            type: 'bendRoad',
-            mouseDirection: this.mouseDirection,
-            point: this.pointsForHelpLines[this.pointsForHelpLines.length - 1],
-          });
-        } else {
-          const road = this.createRoad(
-            this.pointsForHelpLines,
-            this.width,
-            this.depth
-          );
-
-          this.getModelByModelToken(this.modelToken).add(road);
-
-          if (this.pointsForHelpLines.length >= 3 && !this.isOrientedLine) {
-            const first = [this.pointsForHelpLines.at(-3), this.pointsForHelpLines.at(-2)];
-            const second = [this.pointsForHelpLines.at(-2), this.pointsForHelpLines.at(-1)];
-            const {
-              leftTopPoint: first3,
-              leftBottomPoint: first4,
-              rightTopPoint: first1,
-              rightBottomPoint: first2,
-            } = this.getCornerPosition(first, this.width / 2);
-            const {
-              leftTopPoint: second3,
-              leftBottomPoint: second4,
-              rightTopPoint: second1,
-              rightBottomPoint: second2,
-            } = this.getCornerPosition(second, this.width / 2);
-            let intersectionPoint;
-            if (this.mouseDirection === 'left') {
-              intersectionPoint = this.getIntersection(first3, first4, second4, second3);
-              const mesh = this.createCube({ v3: this.pointsForHelpLines.at(-2), v4: second3, v7: intersectionPoint, v2: first4, height: this.depth }, false);
-              mesh.position.y = mesh.position.y + this.depth / 2
-              this.getModelByModelToken(this.modelToken).add(mesh);
-            } else {
-              intersectionPoint = this.getIntersection(first1, first2, second2, second1);
-              const mesh = this.createCube({ v3: this.pointsForHelpLines.at(-2), v4: second1, v7: intersectionPoint, v2: first2, height: this.depth });
-              mesh.position.y = mesh.position.y - this.depth / 2
-              this.getModelByModelToken(this.modelToken).add(mesh);
-            }
-          }
-          this.getModelByModelToken(this.modelToken).fileData.pointsForHelpLines.push({
-            type: 'lineRoad',
-            mouseDirection: this.mouseDirection,
-            point: this.pointsForHelpLines[this.pointsForHelpLines.length - 1],
-          });
-
-          this.isOrientedLine = false;
-        }
-      }
-    }
-
-    // 停止
-    if (e.button === 2) {
-      this.finishMouseDown();
-    }
+    return group;
   }
 
   mouseMove(event) {
     event.stopPropagation();
     if (this.pointsForHelpState) {
-      const startPoint =
-        this.pointsForHelpLines[this.pointsForHelpLines.length - 1];
+      const startPoint = this.pointsForHelpLines.at(-1);
       const intersects = this.getCoord(event);
 
       if (!intersects) return;
@@ -302,7 +129,6 @@ export default class DoubleTrack {
           const crossProduct = new THREE.Vector3();
           crossProduct.crossVectors(vectorDirection, pointVector);
 
-
           // 判断坐标点是否在向量的左侧或右侧
           if (crossProduct.y > 0) {
             this.mouseDirection = 'left';
@@ -314,6 +140,117 @@ export default class DoubleTrack {
         }
         this.drawLineHelper(startPoint, intersects, 30);
       }
+    }
+  }
+
+  onMouseDown(e) {
+    e.stopPropagation();
+    // 清除辅助框
+    this.selectModel = null;
+    this.clearSelectionBoxList();
+
+    let target = this.getModelByModelToken(this.modelToken);
+    if (this.modelToken && target && target.fileData.isCreated) {
+      const raycaster = new THREE.Raycaster(); //光线投射，用于确定鼠标点击位置
+      let mouse = new THREE.Vector2(); //创建二维平面
+      mouse.x = (e.clientX / container.offsetWidth) * 2 - 1;
+      mouse.y = -((e.clientY / container.offsetHeight) * 2) + 1;
+      //以camera为z坐标，确定所点击物体的3D空间位置
+      raycaster.setFromCamera(mouse, this.camera);
+      const intersectsObjs = this.scene.children.filter((v) => {
+        return v.fileData?.type === 'track';
+      });
+      const intersects = raycaster.intersectObjects(intersectsObjs, true);
+      if (intersects.length) {
+        this.showSelectionBox(intersects[0].object.parent);
+        this.selectModel = intersects[0].object.parent;
+        // this.control.attach(this.getModelByModelToken(this.modelToken));
+      } else {
+        this.selectModel = null;
+      }
+    }
+
+    const mouseDownPoint = this.getCoord(e);
+    if (!this.pointsForHelpState) return;
+    if (!mouseDownPoint) return;
+    if (e.button === 0) {
+      // 创建线段
+
+      // 把坐标放到坐标数组中
+      if (!this.ctrlDown) {
+        this.pointsForHelpLines.push(mouseDownPoint);
+      }
+
+      const len = this.pointsForHelpLines.length;
+      // 圆弧后的直线 坐标修改
+      if (this.isOrientedLine && !this.ctrlDown) {
+        const lastPoint = this.calcOritLinePoint(this.vec1.clone(), this.pointsForHelpLines[len - 2], mouseDownPoint)
+        this.pointsForHelpLines.splice(len - 1, 1, lastPoint)
+      }
+
+      // 如果有两个点，则生成线段和墙体
+      if (len >= 2) {
+        if (!target) {
+          target = this.createGroup();
+        }
+        if (target.fileData.pointsForHelpLines.length === 0) {
+          target.fileData.pointsForHelpLines.push({
+            type: 'lineRoad',
+            mouseDirection: this.mouseDirection,
+            point: this.pointsForHelpLines.at(-2),
+          });
+        }
+
+        // 创建多个圆柱子
+        const offset = this.width / 2 - 1;
+        this.createCylinders(this.pointsForHelpLines.at(-2), this.pointsForHelpLines.at(-1), offset, target);
+
+        if (this.ctrlDown) {
+          const { subRes, nextStartPoint } = this.createBend(
+            this.pointsForHelpLines.at(-2),
+            this.pointsForHelpLines.at(-1),
+            this.width,
+            this.mouseDirection === 'right',
+            this.vec1
+          );
+          this.pointsForHelpLines.push(nextStartPoint);
+          target.add(subRes);
+          this.isOrientedLine = true;
+
+          target.fileData.pointsForHelpLines.push({
+            type: 'bendRoad',
+            mouseDirection: this.mouseDirection,
+            point: this.pointsForHelpLines.at(-1),
+          });
+        } else {
+          const road = this.createRoad(
+            this.pointsForHelpLines,
+            this.width,
+            this.depth
+          );
+
+          target.add(road);
+
+          if (this.pointsForHelpLines.length >= 3 && !this.isOrientedLine) {
+            const first = [this.pointsForHelpLines.at(-3), this.pointsForHelpLines.at(-2)];
+            const second = [this.pointsForHelpLines.at(-2), this.pointsForHelpLines.at(-1)];
+            const angleRoad = this.createAngleRoad(first, second, this.width / 2, this.mouseDirection);
+            target.add(angleRoad);
+          }
+          target.fileData.pointsForHelpLines.push({
+            type: 'lineRoad',
+            mouseDirection: this.mouseDirection,
+            point: this.pointsForHelpLines[this.pointsForHelpLines.length - 1],
+          });
+
+          this.isOrientedLine = false;
+        }
+      }
+    }
+
+    // 停止
+    if (e.button === 2) {
+      this.finishMouseDown();
     }
   }
 
@@ -359,10 +296,13 @@ export default class DoubleTrack {
 
   updateRoadGeometry(roadColor) {
     if (this.selectModel) {
-      const modelToken = this.selectModel.fileData.modelToken;
-      this.selectModel.children.forEach((n) => {
-        this.selectModel.remove(n);
-      });
+      const { modelToken, pointsForHelpLines: arr } = this.selectModel.fileData;
+      console.log('arr', JSON.stringify(arr));
+      const target = this.getModelByModelToken(modelToken);
+
+      // 移除
+      this.selectModel.remove(...this.selectModel.children);
+
       this.selectModel.children.forEach((child) => {
         if (child.fileData?.type === 'lineRoad') {
           child.material[2].color.setHex(roadColor);
@@ -370,68 +310,42 @@ export default class DoubleTrack {
           child.material.color.setHex(roadColor);
         }
       });
-      const arr = this.selectModel.fileData.pointsForHelpLines;
+
       let vec = null;
       for (let i = 1; i < arr.length; i += 1) {
         if (i >= 1) {
           if (arr[i].type === 'lineRoad') {
-            const road = this.createRoad(
-              [arr[i].point, arr[i - 1].point],
-              this.width,
-              this.depth,
-            );
-            console.log(this.selectModel.fileData.pointsForHelpLines);
-            this.getModelByModelToken(modelToken).add(road);
+            const road = this.createRoad([arr[i].point, arr[i - 1].point], this.width, this.depth,);
+            target.add(road);
           } else {
-            const startPoint =
-              arr[i - 2].point; // 起点坐标
-            const endPoint =
-              arr[i - 1].point; // 终点坐标
             const { subRes, nextStartPoint } = this.createBend(
-              startPoint,
-              endPoint,
+              arr[i - 2].point,
+              arr[i - 1].point,
               this.width,
               arr[i].mouseDirection === 'right',
               vec
             );
-            this.getModelByModelToken(this.modelToken).add(subRes);
+            target.add(subRes);
           }
-
         }
-        if (i >= 2 && arr[i].type === 'lineRoad') {
+
+        // 创建多个圆柱子
+        const offset = this.width / 2 - 1;
+        this.createCylinders(arr[i - 1].point, arr[i].point, offset, target);
+
+        // 生成补角
+        if (i >= 2 && arr[i].type === 'lineRoad' && arr[i - 1].type !== 'bendRoad') {
           const first = [arr[i - 2].point, arr[i - 1].point];
           const second = [arr[i - 1].point, arr[i].point];
-          const {
-            leftTopPoint: first3,
-            leftBottomPoint: first4,
-            rightTopPoint: first1,
-            rightBottomPoint: first2,
-          } = this.getCornerPosition(first, this.width / 2);
-          const {
-            leftTopPoint: second3,
-            leftBottomPoint: second4,
-            rightTopPoint: second1,
-            rightBottomPoint: second2,
-          } = this.getCornerPosition(second, this.width / 2);
-          let intersectionPoint;
-          if (arr[i].mouseDirection === 'left') {
-            intersectionPoint = this.getIntersection(first3, first4, second4, second3);
-            const mesh = this.createCube({ v3: arr[i - 1].point, v4: second3, v7: intersectionPoint, v2: first4, height: this.depth }, false);
-            mesh.position.y = mesh.position.y + this.depth / 2
-            this.getModelByModelToken(modelToken).add(mesh);
-          } else {
-            intersectionPoint = this.getIntersection(first1, first2, second2, second1);
-            const mesh = this.createCube({ v3: arr[i - 1].point, v4: second1, v7: intersectionPoint, v2: first2, height: this.depth });
-            mesh.position.y = mesh.position.y - this.depth / 2
-            this.getModelByModelToken(modelToken).add(mesh);
-          }
+          const angleRoad = this.createAngleRoad(first, second, this.width / 2, arr[i].mouseDirection);
+          target.add(angleRoad);
         }
+        // 记录当前向量，给下一次使用
         const { direction } = this.getInfoBytwoPoint(
           arr[i - 1].point,
           arr[i].point
         );
         if (arr[i].type === 'lineRoad') {
-          console.log('111')
           vec = direction;
         } else {
           const verticalVector = this.getVerticalVector(vec);
@@ -441,7 +355,6 @@ export default class DoubleTrack {
               verticalVector,
               angle
             );
-            // const v = new THREE.Vector3(1,0,0); // 原始向量
             const rotatedVec = verticalVector.clone().applyQuaternion(quaternion); // 绕轴旋转后的向量
             // 给下一次的初始旋转向量赋值
             vec = rotatedVec;
@@ -461,7 +374,7 @@ export default class DoubleTrack {
           }
         }
       }
-      
+
     }
   }
 
@@ -480,7 +393,6 @@ export default class DoubleTrack {
     // 两个点的坐标
     const startPoint = coord[coord.length - 2]; // 起点坐标
     const endPoint = coord[coord.length - 1]; // 终点坐标
-    console.log("tag", JSON.stringify([startPoint, endPoint]));
 
     const { midpoint, distance, direction } = this.getInfoBytwoPoint(
       startPoint,
@@ -501,13 +413,14 @@ export default class DoubleTrack {
     // });
     // 创建材质
     const material = [
-      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 正面
-      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 背面
+      new THREE.MeshBasicMaterial({ color: this.roadColor }), // 正面
+      new THREE.MeshBasicMaterial({ color: this.roadColor }), // 背面
       // new THREE.MeshBasicMaterial({ map: texture }), // 顶面
       new THREE.MeshBasicMaterial({ color: this.roadColor }), // 底面
-      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 底面
-      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }), // 右侧面
-      new THREE.MeshBasicMaterial({ color: 0x4D4D4F }) // 左侧面
+      new THREE.MeshBasicMaterial({ color: this.roadColor }), // 底面
+      new THREE.MeshBasicMaterial({ color: this.roadColor }), // 右侧面
+      new THREE.MeshBasicMaterial({ color: this.roadColor }), // 左侧面
+      // new THREE.MeshBasicMaterial({ color: 0x4D4D4F }) // 左侧面
     ];
 
     // 创建基础几何体的几何体
@@ -570,7 +483,7 @@ export default class DoubleTrack {
     return { leftTopPoint, leftBottomPoint, rightTopPoint, rightBottomPoint };
   }
 
-  createCylinder(position, radiusTop, radiusBottom, color = 0x4d4d4f) {
+  createCylinderMesh(position, radiusTop, radiusBottom, color = 0x4d4d4f) {
     // 创建柱形几何体
     const geometry = new THREE.CylinderGeometry(
       radiusTop,
@@ -595,6 +508,26 @@ export default class DoubleTrack {
     return cylinder;
   }
 
+  // 创建多个圆柱子
+  createCylinders(startPoint, endPoint, offset, group) {
+    const {
+      leftTopPoint,
+      leftBottomPoint,
+      rightTopPoint,
+      rightBottomPoint,
+    } = this.getCornerPosition([startPoint, endPoint], offset);
+
+    for (const point of [
+      leftTopPoint,
+      leftBottomPoint,
+      rightTopPoint,
+      rightBottomPoint,
+    ]) {
+      const cylinder = this.createCylinderMesh(point, this.radiusTop, this.radiusBottom, this.radiusColor);
+      group.add(cylinder);
+    }
+  }
+
   createBend(
     startPoint,
     endPoint,
@@ -611,7 +544,6 @@ export default class DoubleTrack {
       yAxisAngle = this.getInitY(vec);
       verticalVector = this.getVerticalVector(vec);
     }
-    console.log('111', vec)
 
     const heartShape = new THREE.Shape();
     heartShape.absarc(0, 0, r * 2, 0, Math.PI / 2);
@@ -704,10 +636,7 @@ export default class DoubleTrack {
       // 旋转
       this.vec1 = rotatedVec;
     }
-    // const O = new THREE.Vector3(endPoint.x, endPoint.y, endPoint.z);
-    // // 红色箭头表示向量a
-    // const arrowA = new THREE.ArrowHelper(this.vec1.clone().normalize(), O, this.vec1.length() * 100, 0xff0000);
-    // this.scene.add(arrowA)
+
     const nextStartPoint = this.getPointByVector(
       arcPosition,
       direction,
@@ -718,10 +647,10 @@ export default class DoubleTrack {
 
   /**
    * 创建不规则的几何体
-   * @param {*} param0 
+   * @param {*} param
    * @returns 
    */
-  createCube({ v3, v4, v7, v2, height } = params, isAdd = true) {
+  createCube({ v3, v4, v7, v2, height }, isAdd = true) {
     // ---------------------------------------------------------------------
     // 创建一个立方体
     // ---------------------------------------------------------------------
@@ -757,8 +686,6 @@ export default class DoubleTrack {
     }
     cubeGeometry.setAttribute('position', new THREE.BufferAttribute(verticesArray, 3));
 
-
-
     // 创建立方的面
     const indices = [
       0, 1, 2, 0, 2, 3, // front
@@ -790,6 +717,110 @@ export default class DoubleTrack {
       type: 'angleRoad',
     }
     return cube;
+  }
+
+  createAngleRoad(first, second, offset, mouseDirection) {
+    let mesh;
+    const {
+      leftTopPoint: first3,
+      leftBottomPoint: first4,
+      rightTopPoint: first1,
+      rightBottomPoint: first2,
+    } = this.getCornerPosition(first, offset);
+    const {
+      leftTopPoint: second3,
+      leftBottomPoint: second4,
+      rightTopPoint: second1,
+      rightBottomPoint: second2,
+    } = this.getCornerPosition(second, offset);
+    let intersectionPoint;
+    if (mouseDirection === 'left') {
+      intersectionPoint = this.getIntersection(first3, first4, second4, second3);
+      mesh = this.createCube({ v3: second[0], v4: second3, v7: intersectionPoint, v2: first4, height: this.depth }, false);
+      mesh.position.y = mesh.position.y + this.depth / 2
+    } else {
+      intersectionPoint = this.getIntersection(first1, first2, second2, second1);
+      mesh = this.createCube({ v3: second[0], v4: second1, v7: intersectionPoint, v2: first2, height: this.depth });
+      mesh.position.y = mesh.position.y - this.depth / 2
+    }
+    return mesh;
+  }
+
+  drawLineHelper(startPoint, intersects, radius, color = 0xffff00) {
+    let material;
+    let geometry;
+    if (this.ctrlDown) {
+      // Create a new empty path
+      const path = new THREE.Path();
+      // Move to the starting point
+      path.moveTo(0, 0);
+
+      path.absarc(0, 0, radius, 0, Math.PI / 2, false);
+
+      material = new THREE.LineBasicMaterial({ color });
+      geometry = new THREE.BufferGeometry().setFromPoints(path.getPoints());
+    } else {
+      // 定向画直线
+      const points = [startPoint, intersects];
+      if (this.isOrientedLine) {
+        //给箭头设置一个起点(随便给个位置就行)
+        // const O = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z);
+        // // 红色箭头表示向量a
+        // const arrowA = new THREE.ArrowHelper(vector.clone().normalize(), O, vector.length() * 100, 0xff0000);
+        // this.scene.add(arrowA)
+        points.splice(1, 1, this.calcOritLinePoint(this.vec1.clone(), startPoint, intersects))
+      }
+      geometry = new THREE.BufferGeometry().setFromPoints(points);
+      material = new THREE.LineDashedMaterial({
+        color,
+        linewidth: 2,
+        scale: 1,
+        dashSize: 100,
+        gapSize: 300,
+      });
+
+    }
+    const line = new THREE.Line(geometry, material);
+    if (this.ctrlDown) {
+      const yAxisAngle = this.getInitY(this.vec1);
+      const initPosition = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z);
+      const verticalVector = this.getVerticalVector(this.vec1);
+      if (this.mouseDirection === 'right') {
+
+        line.rotation.x = -Math.PI / 2;
+        line.rotation.z = -yAxisAngle;
+        let arcPosition = this.getPointByVector(
+          initPosition,
+          verticalVector,
+          (3 / 2) * radius
+        );
+        line.position.set(arcPosition.x, arcPosition.y + 3, arcPosition.z);
+      } else if (this.mouseDirection === 'left') {
+
+        line.rotation.x = Math.PI / 2;
+        line.rotation.z = yAxisAngle;
+
+        const reverseVector = verticalVector.clone().negate();
+
+        let arcPosition = this.getPointByVector(
+          initPosition,
+          reverseVector,
+          (3 / 2) * radius
+        );
+        line.position.set(arcPosition.x, arcPosition.y + 3, arcPosition.z);
+      }
+    }
+    line.name = "pointsForHelpLine";
+    SimEditor.getInstance().delMus(
+      this.scene.children.find((item) => item.name === "pointsForHelpLine")
+    );
+    line.traverse((child) => {
+      child.fileData = {
+        type: 'track',
+        modelToken: nanoid(),
+      };
+    });
+    SimEditor.getInstance().addMus(line);
   }
 
   /**
@@ -870,83 +901,6 @@ export default class DoubleTrack {
 
     return verticalVector;
   }
-
-  drawLineHelper(startPoint, intersects, radius, color = 0xffff00) {
-    let material;
-    let geometry;
-    if (this.ctrlDown) {
-      // Create a new empty path
-      const path = new THREE.Path();
-      // Move to the starting point
-      path.moveTo(0, 0);
-
-      path.absarc(0, 0, radius, 0, Math.PI / 2, false);
-
-      material = new THREE.LineBasicMaterial({ color });
-      geometry = new THREE.BufferGeometry().setFromPoints(path.getPoints());
-    } else {
-      // 定向画直线
-      const points = [startPoint, intersects];
-      if (this.isOrientedLine) {
-        //给箭头设置一个起点(随便给个位置就行)
-        // const O = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z);
-        // // 红色箭头表示向量a
-        // const arrowA = new THREE.ArrowHelper(vector.clone().normalize(), O, vector.length() * 100, 0xff0000);
-        // this.scene.add(arrowA)
-        points.splice(1, 1, this.calcOritLinePoint(this.vec1.clone(), startPoint, intersects))
-      }
-      geometry = new THREE.BufferGeometry().setFromPoints(points);
-      material = new THREE.LineDashedMaterial({
-        color,
-        linewidth: 2,
-        scale: 1,
-        dashSize: 100,
-        gapSize: 300,
-      });
-
-    }
-    const line = new THREE.Line(geometry, material);
-    if (this.ctrlDown) {
-      const yAxisAngle = this.getInitY(this.vec1);
-      const initPosition = new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z);
-      const verticalVector = this.getVerticalVector(this.vec1);
-      if (this.mouseDirection === 'right') {
-
-        line.rotation.x = -Math.PI / 2;
-        line.rotation.z = -yAxisAngle;
-        let arcPosition = this.getPointByVector(
-          initPosition,
-          verticalVector,
-          (3 / 2) * radius
-        );
-        line.position.set(arcPosition.x, arcPosition.y + 3, arcPosition.z);
-      } else if (this.mouseDirection === 'left') {
-
-        line.rotation.x = Math.PI / 2;
-        line.rotation.z = yAxisAngle;
-
-        const reverseVector = verticalVector.clone().negate();
-
-        let arcPosition = this.getPointByVector(
-          initPosition,
-          reverseVector,
-          (3 / 2) * radius
-        );
-        line.position.set(arcPosition.x, arcPosition.y + 3, arcPosition.z);
-      }
-    }
-    line.name = "pointsForHelpLine";
-    SimEditor.getInstance().delMus(
-      this.scene.children.find((item) => item.name === "pointsForHelpLine")
-    );
-    line.traverse((child) => {
-      child.fileData = {
-        type: 'track',
-        modelToken: nanoid(),
-      };
-    });
-    SimEditor.getInstance().addMus(line);
-  }
   // 计算定向点的坐标
   calcOritLinePoint(vector, point, intersects) {
     const pointToVector = intersects.clone().projectOnVector(vector);
@@ -958,6 +912,29 @@ export default class DoubleTrack {
     return perpendicularPoint;
   }
 
+  getCoord(e) {
+    const raycaster = new THREE.Raycaster(); //光线投射，用于确定鼠标点击位置
+    let mouse = new THREE.Vector2(); //创建二维平面
+    mouse.x = (e.clientX / container.offsetWidth) * 2 - 1;
+    mouse.y = -((e.clientY / container.offsetHeight) * 2) + 1;
+    //以camera为z坐标，确定所点击物体的3D空间位置
+    raycaster.setFromCamera(mouse, this.camera);
+
+    // 创建虚拟平面
+    const normal = new THREE.Vector3(0, 1, 0);
+
+    const constant = -this.height; // 0 表示平面过原点，可以根据需求调整
+    const planeGround = new THREE.Plane(normal, constant);
+
+    // 计算相机到射线的对象，可能有多个对象，返回一个数组，按照相机距离远近排列
+    const intersects = raycaster.ray.intersectPlane(
+      planeGround,
+      new THREE.Vector3(0, 0, 0)
+    );
+
+    //选中后进行的操作
+    return intersects;
+  }
 
   // 显示辅助盒模型
   showSelectionBox(model) {
