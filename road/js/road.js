@@ -445,7 +445,7 @@ export default class DoubleTrack {
       );
       if (arr[i].type === "lineRoad") {
         const endPoint = this.getPointByVector(
-          arr[i - 1].point,
+          newPoints[i - 1].point,
           direction,
           distance
         );
@@ -456,8 +456,8 @@ export default class DoubleTrack {
         });
       } else {
         const { nextStartPoint } = this.createBend(
-          arr[i - 2].point,
-          arr[i - 1].point,
+          newPoints[i - 2].point,
+          newPoints[i - 1].point,
           this.width,
           arr[i].mouseDirection === "right",
           vec
@@ -468,6 +468,7 @@ export default class DoubleTrack {
           point: nextStartPoint,
         });
       }
+      
       if (arr[i].type === "lineRoad") {
         vec = direction;
       } else {
@@ -496,10 +497,19 @@ export default class DoubleTrack {
           vec = rotatedVec;
         }
       }
-      const O = new THREE.Vector3(arr[i].point.x, arr[i].point.y, arr[i].point.z);
-        // 红色箭头表示向量a
-        const arrowA = new THREE.ArrowHelper(vec.clone().normalize(), O, vec.length() * 100, 0xff0000);
-        this.scene.add(arrowA)
+      // const O = new THREE.Vector3(
+      //   arr[i].point.x,
+      //   arr[i].point.y,
+      //   arr[i].point.z
+      // );
+      // // 红色箭头表示向量a
+      // const arrowA = new THREE.ArrowHelper(
+      //   vec.clone().normalize(),
+      //   O,
+      //   vec.length() * 100,
+      //   0xff0000
+      // );
+      // this.scene.add(arrowA);
     }
     return newPoints;
   }
@@ -869,16 +879,7 @@ export default class DoubleTrack {
     cubeGeometry.computeVertexNormals();
 
     // 创建 UV 映射坐标
-    const uvs = [
-      0,
-      0,
-      0,
-      1,
-      0,
-      0,
-      0,
-      1, // 此示例为一个面贴图
-    ];
+    const uvs = [0, 0, 0, 1, 0, 0, 0, 1];// 此示例为一个面贴图
 
     // 设置 UV 属性
     cubeGeometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
