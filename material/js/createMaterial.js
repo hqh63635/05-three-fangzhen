@@ -146,8 +146,7 @@ export default class createMaterial {
   }
 
   toInterval(fn, interval = 1000, leading) {
-    let timeoutId;
-
+    let timeoutId = this.loop;
     function loop() {
       clearTimeout(timeoutId);
       fn();
@@ -159,16 +158,14 @@ export default class createMaterial {
     } else {
       timeoutId = setTimeout(loop, interval);
     }
-    // 返回用于清除循环的函数
-    return {
-      stop: () => {
-        console.log('111')
-        clearTimeout(timeoutId);
-      }
-    }
   }
 
   loopCreate() {
+    if (this.createNumber === 0) {
+      clearTimeout(this.loop);
+      return;
+    }
+     
     // 遍历model的children，是否存在没有移除的goodModel
     if (this.checkHasGood(this.model, this.modelToken)) {
       // 进入等待状态
@@ -190,10 +187,6 @@ export default class createMaterial {
       }
       this.currentIndex += 1;
       this.createNumber -= 1;
-      if (this.createNumber === 0) {
-        console.log(this.loop);
-        this.loop.stop()
-      };
     }
   }
 
@@ -204,7 +197,7 @@ export default class createMaterial {
 
   // 批量创建
   batchCreates() {
-    this.loop = this.toInterval(() => this.loopCreate(), this.gapTime * 1000, false);
+    this.loop = this.toInterval(() => this.loopCreate(), this.gapTime * 1000, true);
   }
 
   findChildByName(model, name) {
