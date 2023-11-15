@@ -347,7 +347,6 @@ export default class DoubleTrack {
 
       let vec = null;
       const arr = this.updatePoint(pointsForHelpLines);
-      console.log("arr", JSON.stringify(arr));
       for (let i = 1; i < arr.length; i += 1) {
         if (i >= 1) {
           if (arr[i].type === "lineRoad") {
@@ -358,7 +357,7 @@ export default class DoubleTrack {
             );
             target.add(road);
           } else {
-            const { subRes, nextStartPoint } = this.createBend(
+            const { subRes } = this.createBend(
               arr[i - 2].point,
               arr[i - 1].point,
               this.width,
@@ -468,7 +467,7 @@ export default class DoubleTrack {
           point: nextStartPoint,
         });
       }
-      
+
       if (arr[i].type === "lineRoad") {
         vec = direction;
       } else {
