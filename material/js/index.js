@@ -4,8 +4,9 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DDSLoader } from 'three/addons/loaders/DDSLoader.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-import { Tween, Easing, update } from 'three/addons/libs/tween.module.js';
-import createMaterial from "./createMaterial.js";
+import { TWEEN } from 'three/addons/libs/tween.module.min.js';
+import createMaterial from "./MaterialSource.js";
+import materialTermination from "./materialTermination.js";
 import SimEditor from '../../SimEditor.js';
 
 let renderer, scene, camera, orbit, container;
@@ -41,7 +42,7 @@ function init() {
   // 灯光
   const AmbientLight = new THREE.AmbientLight(0xffffff, 1.1);
   scene.add(AmbientLight);
-  const HemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.8);
+  const HemisphereLight = new THREE.HemisphereLight(0xffffff, 0x000000, 0.1);
   scene.add(HemisphereLight);
 
   container.appendChild(renderer.domElement);
@@ -64,7 +65,7 @@ function init() {
   // 创建地板
   const planeGeo = new THREE.PlaneGeometry(3000, 3000);
   const planeMaterial = new THREE.MeshLambertMaterial({
-    color: new THREE.Color("#86909c"),
+    color: 0x86909c,
     side: THREE.DoubleSide,
   });
   const planeMesh = new THREE.Mesh(planeGeo, planeMaterial);
@@ -94,7 +95,7 @@ function init() {
 
     scene.add(res.model['wuliaozhongjie']);
     originModels['wuliaozhongjie'] = res.model['wuliaozhongjie'];
-    res.model['wuliaozhongjie'].position.set(-500, 0, -500);
+    res.model['wuliaozhongjie'].position.set(-600, 0, -500);
     res.model['wuliaozhongjie'].fileData = {
       modelType: 'Material',
       type: 'destroyed',
@@ -128,46 +129,52 @@ const group = new THREE.Group();
 scene.add(group);
 
 let mg = '';
-let MUType = '常数';
-const MUList = [[{ "m": "设备1", "ct": { "fa": "General", "t": "g" }, "v": "设备1" }, 5, null, null], [{ "m": "设备2", "ct": { "fa": "General", "t": "g" }, "v": "设备2" }, 2, null, null], [null, null, null, null], [null, null, null, null], [null, null, null, null], [null, null, null, null], [null, null, null, null], [null, null, null, null], [null, null, null, null], [null, null, null, null]];
-function materialGenerate() {
-  mg = new createMaterial(
-    originModels['yuan'],
-    MUType,
-    MUList,
-    1,
-    2,
-    5,
-    (model) => {
-      console.log(group.children);
-      if (group.children.length < 8) {
-        group.add(model);
-      } else {
-        // model.position.set(100, 50, 0)
-        // Create a TWEEN animation
-        const current = group.children[0]
-        const tween = new Tween(current.position)
-          .to({ x: -500, y: 50, z: -500 }, 2000) // Duration in milliseconds
-          .easing(Easing.Quadratic.InOut) // Easing function
-          .onUpdate(() => {
-            // This function is called on every animation frame
-            // You can use it to update any additional logic during the animation
-          })
-          .onComplete(() => {
-            group.remove(current);
-            group.add(model);
-          });
-        tween.start();
-      }
+let de = '';
+const onModelCreated = (model) => {   // 回调执行方法，创建成功后的回调
+  group.add(model);
+  const current = group.children[0];
+  if (!current) return;
+  const tween = new TWEEN.Tween(model.position)
+    .to({ x: -500, y: 50, z: -500 }, 2000) // Duration in milliseconds
+    .easing(TWEEN.Easing.Quadratic.InOut) // Easing function
+    .onUpdate(() => {
 
-    },
+    })
+    .onComplete(() => {
+      de.destroy(model);
+    });
+  tween.start();
+};
+
+const params = {
+  model: '',
+  MUType: '常数',
+  MUList: '小车2',
+  createTime: 1,
+  gapTime: 2,
+  number: 5,
+  onModelCreated,
+}
+
+function materialGenerate() {
+  // 销毁方法实例
+  de = new materialTermination(
+    {
+      model: originModels['wuliaozhongjie'], // 销毁器实例
+      dealTime: 3,
+    }
   );
+  // 生成器方法实例
+  params.model = originModels['yuan'], // 生成器实例
+    mg = new createMaterial(
+      params,
+    );
 }
 
 
-function updateParameters(params) {
-  console.log('updateParameters', params);
-  mg.onUpdate(params.MUType, MUList, params.createTime, params.gapTime, params.createNumber);
+function updateParameters(params2) {
+  console.log('updateParameters', params2);
+  mg.update(params2);
 }
 
 let gui;
@@ -176,9 +183,9 @@ function changeGui(model) {
   if (model.fileData.type === 'start') {
     if (gui) gui.destroy();
     gui = new GUI();
-    gui.add(model.fileData, 'createTime', 1, 100).onChange(() => updateParameters(model.fileData));
-    gui.add(model.fileData, 'gapTime', 1, 100).onChange(() => updateParameters(model.fileData));
-    gui.add(model.fileData, 'createNumber', -1, 100).onChange(() => updateParameters(model.fileData));
+    gui.add(params, 'createTime', 1, 100).onChange(() => updateParameters(params));
+    gui.add(params, 'gapTime', 1, 100).onChange(() => updateParameters(params));
+    gui.add(params, 'number', -1, 100).onChange(() => updateParameters(params));
 
     const options = {
       常数: '常数',
@@ -187,26 +194,35 @@ function changeGui(model) {
       随机: '随机',
       百分比: '百分比',
     };
-
-    // Initial selected option
-
-
-    // Add the selector to the GUI
     const selector = gui.add(options, 'selected', Object.keys(options)).name('Select Option').onChange((value) => {
-      // Handle the change event
-      console.log('Selected Option:', value);
-      model.fileData.MUType = value;
-      updateParameters(model.fileData);
+      params.MUType = value;
+      if (params.MUType !== '常数') {
+        params.MUList = [
+          [{ "m": "小车1", "ct": { "fa": "General", "t": "g" }, "v": "小车1" }, 2, null, null],
+          [null, null, null, null],
+          [{ "m": "小车2", "ct": { "fa": "General", "t": "g" }, "v": "小车2" }, 2, null, null],
+          [null, null, null, null],
+          [null, null, null, null],
+          [null, null, null, null],
+          [null, null, null, null],
+          [null, null, null, null],
+          [null, null, null, null],
+          [null, null, null, null],
+        ];
+      } else {
+        params.MUList = '小车2';
+      }
+      updateParameters(params);
     });
 
-    selector.setValue(model.fileData.MUType);
+    selector.setValue(params.MUType);
 
     folder = gui.addFolder('Methods');
-    folder.add({
-      create: function () {
-        mg.create();
-      },
-    }, 'create').name('create');
+    // folder.add({
+    //   create: function () {
+    //     mg.create();
+    //   },
+    // }, 'create').name('create');
     folder.add({
       stop: function () {
         // 在按钮被点击时执行的逻辑
@@ -228,10 +244,6 @@ function changeGui(model) {
     gui.add(model.fileData, 'gapTime', 1, 100).onChange(updateParameters);
   }
 }
-
-// gui.add(params, '选择对象').onSelect(updateParameters);
-
-
 window.scene = scene;
 
 
@@ -239,7 +251,7 @@ window.scene = scene;
 
 
 
-// =================================== 通用方法 ======
+//#region =================================== 通用方法 ======
 function onMouseDown(e) {
   e.stopPropagation();
   const raycaster = new THREE.Raycaster(); //光线投射，用于确定鼠标点击位置
@@ -308,7 +320,7 @@ window.addEventListener("resize", onWindowResize);
 function animate() {
   requestAnimationFrame(animate);
 
-  update();
+  TWEEN.update();
   render();
 }
 
@@ -316,4 +328,6 @@ function render() {
   renderer.render(scene, camera);
 }
 
-// ====================== ==================
+//#endregion ========================================
+
+
