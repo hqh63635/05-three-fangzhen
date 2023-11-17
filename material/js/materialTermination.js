@@ -56,6 +56,12 @@ export default class materialTermination {
         })
         .onComplete(() => {
           this.model.remove(task);
+          if (task.material) {
+            task.material.dispose();
+          }
+          if (task.geometry) {
+            task.geometry.dispose();
+          }
           TWEEN.remove(tween);
           this.run();
         });
