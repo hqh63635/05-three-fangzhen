@@ -6,8 +6,11 @@ import { DDSLoader } from 'three/addons/loaders/DDSLoader.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 import { TWEEN } from 'three/addons/libs/tween.module.min.js';
 import createMaterial from "./MaterialSource.js";
-import materialTermination from "./materialTermination.js";
+import MaterialTermination from "./MaterialTermination.js";
+import WorkStation from "./workStation.js";
+import ParallelStation from "./ParallelStation.js";
 import SimEditor from '../../SimEditor.js';
+
 
 let renderer, scene, camera, orbit, container;
 
@@ -23,7 +26,7 @@ function init() {
   const { offsetWidth, offsetHeight } = container;
   camera = new THREE.PerspectiveCamera(50, offsetWidth / offsetHeight, 1, 2e6);
   camera.name = "Camera";
-  camera.position.set(500, 500, 500);
+  camera.position.set(800, 800, 800);
   camera.lookAt(0, 0, 0);
 
   scene = new THREE.Scene();
@@ -80,7 +83,7 @@ function init() {
   SimEditor.getInstance().setParams(scene, camera, control);
 
 
-  const models = ['yuan', 'wuliaozhongjie'];
+  const models = ['yuan', 'wuliaozhongjie', 'huanchongqu'];
   loadForGltf(models, '../material/models/').then((res) => {
     scene.add(res.model['yuan']);
     originModels['yuan'] = res.model['yuan'];
@@ -96,16 +99,21 @@ function init() {
     scene.add(res.model['wuliaozhongjie']);
     originModels['wuliaozhongjie'] = res.model['wuliaozhongjie'];
     res.model['wuliaozhongjie'].position.set(-600, 0, -500);
-    res.model['wuliaozhongjie'].fileData = {
-      modelType: 'Material',
-      type: 'destroyed',
-      createTime: 1,
-      gapTime: 5,
-    };
+
+    scene.add(res.model['huanchongqu']);
+    originModels['huanchongqu'] = res.model['huanchongqu'];
+    res.model['huanchongqu'].position.set(300, 0, -500);
+
+
+    const parallelStation = originModels['huanchongqu'].clone();
+
+    parallelStation.name = 'bingxinggongwei';
+    parallelStation.position.set(-600, 0, 300);
+    originModels['parallelStation'] = parallelStation;
+    scene.add(parallelStation)
 
     materialGenerate();
   });
-
 
   container.addEventListener("mousedown", onMouseDown, false);
 }
@@ -130,51 +138,76 @@ scene.add(group);
 
 let mg = '';
 let de = '';
-const onModelCreated = (model) => {   // 回调执行方法，创建成功后的回调
-  group.add(model);
-  const current = group.children[0];
-  if (!current) return;
-  const tween = new TWEEN.Tween(model.position)
+let wk = '';
+let ps = '';
+
+const params = {
+  model: null,
+  MUType: '常数',
+  MU: '物料/wuliao',
+  createTime: 1,
+  gapTime: 2,
+  createNumber: 10,
+}
+
+const wuliaozhongjie = {
+  model: null,
+  dealTime: 10,
+  setupTime: 5,
+}
+
+async function onModelCreated(model) {
+  // group.add(model);
+  // const current = group.children[0];
+  // if (!current) return;
+  const target = await wk.add(model);
+  const tween2 = new TWEEN.Tween(target.obj.position)
     .to({ x: -500, y: 50, z: -500 }, 2000) // Duration in milliseconds
     .easing(TWEEN.Easing.Quadratic.InOut) // Easing function
     .onUpdate(() => {
 
     })
-    .onComplete(() => {
-      de.destroy(model);
-    });
-  tween.start();
-};
+    .onComplete(async () => {
+      const a = await ps.add(target.obj);
+      // console.log('de', de.getWorldPosition())
+      console.log('aaa', a);
 
-const params = {
-  model: '',
-  MUType: '常数',
-  MUList: '小车2',
-  createTime: 1,
-  gapTime: 2,
-  number: 5,
-  onModelCreated,
+      const b = await de.destroyed(target.obj);
+    });
+  tween2.start();
 }
 
 function materialGenerate() {
   // 销毁方法实例
-  de = new materialTermination(
-    {
-      model: originModels['wuliaozhongjie'], // 销毁器实例
-      dealTime: 3,
-    }
+  wuliaozhongjie.model = originModels['wuliaozhongjie']; // 
+  de = new MaterialTermination(
+    wuliaozhongjie
   );
   // 生成器方法实例
-  params.model = originModels['yuan'], // 生成器实例
-    mg = new createMaterial(
-      params,
-    );
+  params.model = originModels['yuan']; // 生成器实例
+  mg = new createMaterial(
+    params,
+  );
+
+  wk = new WorkStation({
+    model: originModels['huanchongqu'],
+  });
+
+
+  ps = new ParallelStation({
+    model: originModels['parallelStation'],
+    row: 2,
+    col: 2,
+  });
 }
 
+function updateParameters(option) {
+  console.log('updateParameters', option);
+  mg.update(option);
+}
 
-function updateParameters(params2) {
-  console.log('updateParameters', params2);
-  mg.update(params2);
+function updateDe(option) {
+  de.update(option);
 }
 
 let gui;
@@ -183,9 +216,9 @@ function changeGui(model) {
   if (model.fileData.type === 'start') {
     if (gui) gui.destroy();
     gui = new GUI();
-    gui.add(params, 'createTime', 1, 100).onChange(() => updateParameters(params));
-    gui.add(params, 'gapTime', 1, 100).onChange(() => updateParameters(params));
-    gui.add(params, 'number', -1, 100).onChange(() => updateParameters(params));
+    gui.add(params, 'createTime', 0, 100).onChange((value) => updateParameters({ createTime: value }));
+    gui.add(params, 'gapTime', 0, 100).onChange((value) => updateParameters({ gapTime: value }));
+    gui.add(params, 'createNumber', -1, 100).onChange((value) => updateParameters({ createNumber: value }));
 
     const options = {
       常数: '常数',
@@ -196,22 +229,6 @@ function changeGui(model) {
     };
     const selector = gui.add(options, 'selected', Object.keys(options)).name('Select Option').onChange((value) => {
       params.MUType = value;
-      if (params.MUType !== '常数') {
-        params.MUList = [
-          [{ "m": "小车1", "ct": { "fa": "General", "t": "g" }, "v": "小车1" }, 2, null, null],
-          [null, null, null, null],
-          [{ "m": "小车2", "ct": { "fa": "General", "t": "g" }, "v": "小车2" }, 2, null, null],
-          [null, null, null, null],
-          [null, null, null, null],
-          [null, null, null, null],
-          [null, null, null, null],
-          [null, null, null, null],
-          [null, null, null, null],
-          [null, null, null, null],
-        ];
-      } else {
-        params.MUList = '小车2';
-      }
       updateParameters(params);
     });
 
@@ -234,14 +251,14 @@ function changeGui(model) {
       batchCreates: function () {
         // 在按钮被点击时执行的逻辑
         console.log('batchCreates');
-        mg.batchCreates();
+        mg.batchCreates(onModelCreated);
       },
     }, 'batchCreates').name('batchCreates');
   } else {
     if (gui) gui.destroy();
     gui = new GUI();
-    gui.add(model.fileData, 'createTime', 1, 100).onChange(updateParameters);
-    gui.add(model.fileData, 'gapTime', 1, 100).onChange(updateParameters);
+    gui.add(wuliaozhongjie, 'dealTime', 1, 100).onChange((value) => updateDe({ dealTime: value }));
+    gui.add(wuliaozhongjie, 'setupTime', 0, 100).onChange((value) => updateDe({ setupTime: value }));
   }
 }
 window.scene = scene;
@@ -265,6 +282,7 @@ function onMouseDown(e) {
   });
   const intersects = raycaster.intersectObjects(intersectsObjs, true);
   if (intersects.length) {
+    console.log(intersects[0].object.position);
     // 切换面板  
     const model = findTarget(intersects[0].object);
     changeGui(model);

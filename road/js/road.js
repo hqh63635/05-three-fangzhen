@@ -176,6 +176,7 @@ export default class DoubleTrack {
       });
       const intersects = raycaster.intersectObjects(intersectsObjs, true);
       if (intersects.length) {
+        console.log(`坐标是: ${intersects[0].object.parent}`, intersects[0].object.parent)
         this.showSelectionBox(intersects[0].object.parent);
         this.selectModel = intersects[0].object.parent;
         // this.control.attach(this.getModelByModelToken(this.modelToken));

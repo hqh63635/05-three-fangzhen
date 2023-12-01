@@ -126,6 +126,32 @@ function updateParameters() {
   road1.updateParameters(width, height, depth, roadColor, radiusTop, radiusBottom);
 }
 
+
+// 创建曲线路径
+const curve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(-2, 0, 0),
+  new THREE.Vector3(-1, 1, 0),
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(1, 1, 0),
+  new THREE.Vector3(2, 0, 0),
+]);
+
+const points = curve.getPoints(50);
+const line = new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints(points),
+  new THREE.LineBasicMaterial({ color: 0x0cc7d8 })
+);
+line.name = 'Line';
+// 将线对象添加到场景
+scene.add(line);
+
+// 创建虚拟平面
+// const normal = new THREE.Vector3(0, 1, 0);
+// const constant = -10; // 0 表示平面过原点，可以根据需求调整
+// const planeGround = new THREE.Plane(normal, constant);
+// const planeHelper = new THREE.PlaneHelper(planeGround, 100 * 0.5, 0xffff00);
+// scene.add(planeHelper);
+
 const gui = new GUI();
 gui.add(params, 'height', 1, 100).onChange(updateParameters);
 gui.add(params, 'width', 10, 100).onChange(updateParameters);
@@ -156,7 +182,7 @@ const cube = new THREE.Mesh(geometry2, material2);
 cube.position.set(0, 5, 0);
 cube.name = 'cube';
 // 将网格对象添加到场景
-scene.add(cube);
+//scene.add(cube);
 
 
 
